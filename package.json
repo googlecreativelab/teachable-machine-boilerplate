@@ -1,0 +1,38 @@
+{
+  "name": "cl-teachable-machine-boilerplate",
+  "version": "0.1.0",
+  "license": "",
+  "dependencies": {
+    "deeplearn": "^0.3.12",
+    "deeplearn-knn-image-classifier": "^0.2.0"
+  },
+  "scripts": {
+    "start": "budo main.js:dist/build.js --live --host localhost",
+    "build": "browserify main.js -o dist/build.js"
+  },
+  "browserify": {
+    "transform": [
+      [
+        "babelify",
+        {
+          "presets": [
+            "es2015"
+          ],
+          "plugins": [
+            "syntax-async-functions",
+            "transform-regenerator"
+          ]
+        }
+      ]
+    ]
+  },
+  "devDependencies": {
+    "babel-core": "^6.26.0",
+    "babel-loader": "^7.1.2",
+    "babel-plugin-syntax-async-functions": "^6.13.0",
+    "babel-plugin-transform-regenerator": "^6.26.0",
+    "babel-preset-es2015": "^6.24.1",
+    "babelify": "^8.0.0",
+    "budo": "^10.0.4"
+  }
+}
