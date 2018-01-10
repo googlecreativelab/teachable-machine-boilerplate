@@ -4,12 +4,16 @@
   "license": "",
   "dependencies": {
     "deeplearn": "^0.3.12",
-    "deeplearn-knn-image-classifier": "^0.2.0"
+    "deeplearn-knn-image-classifier": "^0.2.0",
+    "pre-commit": "^1.2.2"
   },
   "scripts": {
     "start": "budo main.js:dist/build.js --live --host localhost",
     "build": "browserify main.js -o dist/build.js"
   },
+  "pre-commit": [
+    "build"
+  ],
   "browserify": {
     "transform": [
       [
