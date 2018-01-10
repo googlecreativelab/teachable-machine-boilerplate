@@ -1,5 +1,8 @@
 # Teachable Machine Boilerplate
-This is a small boilerplate project that demonstrates how to use [deeplearn.js](https://deeplearnjs.org) to create projects like [Teachable Machine](https://teachablemachine.withgoogle.com/). The code shows how you can create setup a KNN classifier that can be trained live in the browser on a webcam image. It is intentionally kept very simple so it can provide a starting point for new projects.
+**[Try this demo](https://googlecreativelab.github.io/teachable-machine-boilerplate/)**
+
+This is a small boilerplate project that demonstrates how to use [deeplearn.js](https://deeplearnjs.org) to create projects 
+like [Teachable Machine](https://teachablemachine.withgoogle.com/). The code shows how you can create setup a KNN classifier that can be trained live in the browser on a webcam image. It is intentionally kept very simple so it can provide a starting point for new projects.
 
 Behind the scenes the image from the webcam is being processed by a small neural network called [Squeezenet](https://github.com/DeepScale/SqueezeNet). This network is trained to recognize all sorts of classes from the imagenet dataset, and is optimized to be really small, making is useable in the browser. Instead of reading the prediction values from the SqueezeNet network, we instead take the second to last layer in the neural network and feed it into a KNN ([k-nearest neighbors](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm)) classifier that allows you to train your own classes. 
 
