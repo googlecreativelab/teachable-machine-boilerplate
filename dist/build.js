@@ -1533,7 +1533,7 @@ var SqueezeNet = (function () {
         var _this = this;
         var _a = this.math.scope(function () {
             var activation;
-            var preprocessedInput = _this.math.subtract(input, _this.preprocessOffset);
+            var preprocessedInput = _this.math.subtract(input.asType('float32'), _this.preprocessOffset);
             var conv1 = _this.math.conv2d(preprocessedInput, _this.variables['conv1_W:0'], _this.variables['conv1_b:0'], 2, 0);
             var conv1relu = _this.math.relu(conv1);
             if (activationName === 'conv_1') {
@@ -1772,7 +1772,7 @@ var InMemoryDataset = (function () {
         exampleIndices =
             exampleIndices.slice(exampleIndices.length * STATS_SAMPLE_PERCENTAGE);
         for (var i = 0; i < exampleIndices.length; i++) {
-            var inputValues = data[exampleIndices[i]].getValues();
+            var inputValues = data[exampleIndices[i]].dataSync();
             for (var j = 0; j < inputValues.length; j++) {
                 inputMin = Math.min(inputMin, inputValues[j]);
                 inputMax = Math.max(inputMax, inputValues[j]);
@@ -1793,7 +1793,7 @@ var InMemoryDataset = (function () {
         var inputSize = util.sizeFromShape(examples[0].shape);
         var newExamples = [];
         examples.forEach(function (example) {
-            var inputValues = example.getValues();
+            var inputValues = example.dataSync();
             var normalizedValues = new Float32Array(inputSize);
             for (var j = 0; j < inputSize; j++) {
                 var curLowerBound = curBoundsIsPerDimension ?
@@ -1838,7 +1838,7 @@ var InMemoryDataset = (function () {
             this.normalizationInfo[dataIndex].maxValues[i] = Number.NEGATIVE_INFINITY;
         }
         this.dataset[dataIndex].forEach(function (example) {
-            var inputValues = example.getValues();
+            var inputValues = example.dataSync();
             for (var k = 0; k < size; k++) {
                 _this.normalizationInfo[dataIndex].minValues[k] = Math.min(_this.normalizationInfo[dataIndex].minValues[k], inputValues[k]);
                 _this.normalizationInfo[dataIndex].maxValues[k] = Math.max(_this.normalizationInfo[dataIndex].maxValues[k], inputValues[k]);
@@ -4334,6 +4334,7 @@ var environment_1 = require("../../environment");
 var ndarray_1 = require("../../math/ndarray");
 var util = require("../../util");
 var graph_1 = require("../graph");
+var graph_util = require("../graph_util");
 var op_1 = require("./op");
 var Softmax = (function (_super) {
     __extends(Softmax, _super);
@@ -4350,8 +4351,16 @@ var Softmax = (function (_super) {
             inferenceArrays.set(_this.output, keep(math.softmax(logits)));
         });
     };
-    Softmax.prototype.backProp = function () {
-        throw Error('Softmax backprop is not yet implemented');
+    Softmax.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
+        var _this = this;
+        var y = inferenceArrays.get(this.output);
+        var dy = gradientArrays.get(this.output);
+        math.scope(function () {
+            if (graph_util.shouldBackProp(_this.logitsTensor)) {
+                var dlogits = math.elementWiseMul(math.subtract(dy, math.sum(math.elementWiseMul(dy, y))), y);
+                gradientArrays.add(_this.logitsTensor, dlogits);
+            }
+        });
     };
     return Softmax;
 }(op_1.Operation));
@@ -4406,7 +4415,7 @@ function crossEntropyCost(math, y, target, epsilon) {
 }
 exports.crossEntropyCost = crossEntropyCost;
 
-},{"../../environment":15,"../../math/ndarray":94,"../../util":100,"../graph":16,"./op":33}],37:[function(require,module,exports){
+},{"../../environment":15,"../../math/ndarray":94,"../../util":100,"../graph":16,"../graph_util":17,"./op":33}],37:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -4775,7 +4784,7 @@ var AdamaxOptimizer = (function (_super) {
                 var ut0 = math.multiply(_this.b2, oldWeightedInfNorm);
                 var ut1 = math.abs(gradient);
                 var newWeightedInfNorm = math.add(math.relu(math.subtract(ut0, ut1)), ut1);
-                var variable = math.scaledArrayAdd(_this.one, oldVariable, math.divide(_this.c, math.subtract(_this.one, _this.accB1)), math.divide(newFirstMoment, math.add(_this.eps, newWeightedInfNorm)));
+                var variable = math.scaledArrayAdd(_this.one, oldVariable, math.divideStrict(_this.c, math.subtract(_this.one, _this.accB1)), math.divide(newFirstMoment, math.add(_this.eps, newWeightedInfNorm)));
                 activationArrayMap.set(node.output, keep(variable));
                 node.data = variable;
                 _this.firstMoment.set(node.output, keep(newFirstMoment));
@@ -5697,7 +5706,7 @@ var GraphRunner = (function () {
                 inferenceValues.push(_this.session.eval(_this.inferenceTensor, ndarrayFeedEntries));
             }
             if (_this.eventObserver.inferenceExamplesPerSecCallback != null) {
-                inferenceValues[inferenceValues.length - 1].getValues();
+                inferenceValues[inferenceValues.length - 1].dataSync();
                 var inferenceExamplesPerSecTime = performance.now() - start;
                 var examplesPerSec = (_this.inferenceExampleCount * 1000 / inferenceExamplesPerSecTime);
                 _this.eventObserver.inferenceExamplesPerSecCallback(examplesPerSec);
@@ -6115,7 +6124,14 @@ function parseAxisParam(axis, shape) {
     else if (typeof (axis) === 'number') {
         axis = [axis];
     }
-    return axis;
+    var rank = shape.length;
+    axis.forEach(function (a, i) {
+        if (a < -rank || a >= rank) {
+            throw new Error("Axis must be between -rank and rank-1. " +
+                ("Got axis[" + i + "]=" + a + " where rank is " + rank));
+        }
+    });
+    return axis.map(function (a) { return a < 0 ? rank + a : a; });
 }
 exports.parseAxisParam = parseAxisParam;
 function assertAxesAreInnerMostDims(msg, axes, rank) {
@@ -6287,10 +6303,10 @@ var MathBackendCPU = (function () {
         }
     };
     MathBackendCPU.prototype.clone = function (x) {
-        return ndarray_1.NDArray.make(x.shape, { values: new Float32Array(x.getValues()) });
+        return ndarray_1.NDArray.make(x.shape, { values: new Float32Array(x.dataSync()) });
     };
     MathBackendCPU.prototype.slice1D = function (x, begin, size) {
-        var newVals = x.getValues().slice(begin, begin + size);
+        var newVals = x.dataSync().slice(begin, begin + size);
         return ndarray_1.Array1D.new(newVals);
     };
     MathBackendCPU.prototype.slice2D = function (x, begin, size) {
@@ -6335,9 +6351,9 @@ var MathBackendCPU = (function () {
     MathBackendCPU.prototype.concat1D = function (a, b) {
         var outShape = concat_util.computeOutShape(a.shape, b.shape, 0);
         var result = ndarray_1.Array1D.zeros(outShape);
-        var aVals = a.getValues();
-        var bVals = b.getValues();
-        var vals = result.getValues();
+        var aVals = a.dataSync();
+        var bVals = b.dataSync();
+        var vals = result.dataSync();
         vals.set(aVals, 0);
         vals.set(bVals, a.size);
         return result;
@@ -6346,9 +6362,9 @@ var MathBackendCPU = (function () {
         var outShape = concat_util.computeOutShape(a.shape, b.shape, axis);
         var result = ndarray_1.Array2D.zeros(outShape);
         if (axis === 0) {
-            var aVals = a.getValues();
-            var bVals = b.getValues();
-            var vals = result.getValues();
+            var aVals = a.dataSync();
+            var bVals = b.dataSync();
+            var vals = result.dataSync();
             vals.set(aVals, 0);
             vals.set(bVals, a.size);
             return result;
@@ -6374,9 +6390,9 @@ var MathBackendCPU = (function () {
         var outShape = concat_util.computeOutShape(a.shape, b.shape, axis);
         var result = ndarray_1.Array3D.zeros(outShape);
         if (axis === 0) {
-            var aVals = a.getValues();
-            var bVals = b.getValues();
-            var vals = result.getValues();
+            var aVals = a.dataSync();
+            var bVals = b.dataSync();
+            var vals = result.dataSync();
             vals.set(aVals, 0);
             vals.set(bVals, a.size);
             return result;
@@ -6404,9 +6420,9 @@ var MathBackendCPU = (function () {
         var outShape = concat_util.computeOutShape(a.shape, b.shape, axis);
         var result = ndarray_1.Array4D.zeros(outShape);
         if (axis === 0) {
-            var aVals = a.getValues();
-            var bVals = b.getValues();
-            var vals = result.getValues();
+            var aVals = a.dataSync();
+            var bVals = b.dataSync();
+            var vals = result.dataSync();
             vals.set(aVals, 0);
             vals.set(bVals, a.size);
             return result;
@@ -6487,8 +6503,8 @@ var MathBackendCPU = (function () {
         var resultDtype = types_1.SumTypesMap[x.dtype];
         var result = ndarray_1.NDArray.zeros(outShape, resultDtype);
         var reduceSize = util.sizeFromShape(reduceShape);
-        var vals = result.getValues();
-        var aVals = x.getValues();
+        var vals = result.dataSync();
+        var aVals = x.dataSync();
         for (var i = 0; i < vals.length; ++i) {
             var offset = i * reduceSize;
             var sum = 0;
@@ -6504,8 +6520,8 @@ var MathBackendCPU = (function () {
         var _a = axis_util.computeOutAndReduceShapes(x.shape, axes), outShape = _a[0], reduceShape = _a[1];
         var result = ndarray_1.NDArray.zeros(outShape, 'int32');
         var reduceSize = util.sizeFromShape(reduceShape);
-        var vals = result.getValues();
-        var aVals = x.getValues();
+        var vals = result.dataSync();
+        var aVals = x.dataSync();
         for (var i = 0; i < vals.length; ++i) {
             var offset = i * reduceSize;
             var min = aVals[offset];
@@ -6530,8 +6546,8 @@ var MathBackendCPU = (function () {
         var _a = axis_util.computeOutAndReduceShapes(x.shape, axes), outShape = _a[0], reduceShape = _a[1];
         var result = ndarray_1.NDArray.zeros(outShape, 'int32');
         var reduceSize = util.sizeFromShape(reduceShape);
-        var vals = result.getValues();
-        var aVals = x.getValues();
+        var vals = result.dataSync();
+        var aVals = x.dataSync();
         for (var i = 0; i < vals.length; ++i) {
             var offset = i * reduceSize;
             var max = aVals[offset];
@@ -6568,7 +6584,7 @@ var MathBackendCPU = (function () {
         return this.topK(x, k).indices;
     };
     MathBackendCPU.prototype.topK = function (x, k) {
-        var values = x.getValues();
+        var values = x.dataSync();
         var valuesAndIndices = [];
         for (var i = 0; i < values.length; i++) {
             valuesAndIndices.push({ value: values[i], index: i });
@@ -6592,8 +6608,8 @@ var MathBackendCPU = (function () {
         var _a = axis_util.computeOutAndReduceShapes(x.shape, axes), outShape = _a[0], reduceShape = _a[1];
         var result = ndarray_1.NDArray.zeros(outShape, x.dtype);
         var reduceSize = util.sizeFromShape(reduceShape);
-        var vals = result.getValues();
-        var aVals = x.getValues();
+        var vals = result.dataSync();
+        var aVals = x.dataSync();
         for (var i = 0; i < vals.length; ++i) {
             var offset = i * reduceSize;
             var min = aVals[0];
@@ -6611,13 +6627,16 @@ var MathBackendCPU = (function () {
         }
         return result;
     };
+    MathBackendCPU.prototype.minimum = function (a, b) {
+        return this.broadcastedBinaryOp(a, b, a.dtype, function (aVal, bVal) { return Math.min(aVal, bVal); });
+    };
     MathBackendCPU.prototype.max = function (x, axes) {
         axis_util.assertAxesAreInnerMostDims('max', axes, x.rank);
         var _a = axis_util.computeOutAndReduceShapes(x.shape, axes), outShape = _a[0], reduceShape = _a[1];
         var result = ndarray_1.NDArray.zeros(outShape, x.dtype);
         var reduceSize = util.sizeFromShape(reduceShape);
-        var vals = result.getValues();
-        var aVals = x.getValues();
+        var vals = result.dataSync();
+        var aVals = x.dataSync();
         for (var i = 0; i < vals.length; ++i) {
             var offset = i * reduceSize;
             var max = aVals[offset];
@@ -6635,8 +6654,11 @@ var MathBackendCPU = (function () {
         }
         return result;
     };
+    MathBackendCPU.prototype.maximum = function (a, b) {
+        return this.broadcastedBinaryOp(a, b, a.dtype, function (aVal, bVal) { return Math.max(aVal, bVal); });
+    };
     MathBackendCPU.prototype.ceil = function (x) {
-        var values = x.getValues();
+        var values = x.dataSync();
         var newValues = new Float32Array(values.length);
         for (var i = 0; i < values.length; ++i) {
             newValues[i] = Math.ceil(values[i]);
@@ -6644,7 +6666,7 @@ var MathBackendCPU = (function () {
         return ndarray_1.NDArray.make(x.shape, { values: newValues });
     };
     MathBackendCPU.prototype.floor = function (x) {
-        var values = x.getValues();
+        var values = x.dataSync();
         var newValues = new Float32Array(values.length);
         for (var i = 0; i < values.length; ++i) {
             newValues[i] = Math.floor(values[i]);
@@ -6652,7 +6674,7 @@ var MathBackendCPU = (function () {
         return ndarray_1.NDArray.make(x.shape, { values: newValues });
     };
     MathBackendCPU.prototype.exp = function (x) {
-        var values = x.getValues();
+        var values = x.dataSync();
         var newValues = new Float32Array(values.length);
         for (var i = 0; i < values.length; ++i) {
             newValues[i] = Math.exp(values[i]);
@@ -6660,7 +6682,7 @@ var MathBackendCPU = (function () {
         return ndarray_1.NDArray.make(x.shape, { values: newValues });
     };
     MathBackendCPU.prototype.log = function (x) {
-        var values = x.getValues();
+        var values = x.dataSync();
         var newValues = new Float32Array(values.length);
         for (var i = 0; i < values.length; ++i) {
             var value = values[i];
@@ -6669,7 +6691,7 @@ var MathBackendCPU = (function () {
         return ndarray_1.NDArray.make(x.shape, { values: newValues });
     };
     MathBackendCPU.prototype.sqrt = function (x) {
-        var values = x.getValues();
+        var values = x.dataSync();
         var newValues = new Float32Array(values.length);
         for (var i = 0; i < values.length; ++i) {
             var value = values[i];
@@ -6678,7 +6700,7 @@ var MathBackendCPU = (function () {
         return ndarray_1.NDArray.make(x.shape, { values: newValues });
     };
     MathBackendCPU.prototype.square = function (x) {
-        var values = x.getValues();
+        var values = x.dataSync();
         var newValues = new Float32Array(values.length);
         for (var i = 0; i < values.length; ++i) {
             var value = values[i];
@@ -6688,8 +6710,8 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.relu = function (x) {
         var res = ndarray_1.NDArray.zeros(x.shape, x.dtype);
-        var resVals = res.getValues();
-        var inVals = x.getValues();
+        var resVals = res.dataSync();
+        var inVals = x.dataSync();
         for (var i = 0; i < inVals.length; ++i) {
             var val = inVals[i];
             if (util.isValNaN(val, x.dtype)) {
@@ -6794,7 +6816,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.clip = function (x, min, max) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.min(max, Math.max(min, values[i]));
         }
@@ -6802,7 +6824,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.abs = function (x) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.abs(values[i]);
         }
@@ -6810,7 +6832,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.sigmoid = function (x) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = 1 / (1 + Math.exp(-values[i]));
         }
@@ -6818,7 +6840,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.sin = function (x) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.sin(values[i]);
         }
@@ -6826,7 +6848,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.cos = function (x) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.cos(values[i]);
         }
@@ -6834,7 +6856,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.tan = function (x) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.tan(values[i]);
         }
@@ -6842,7 +6864,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.asin = function (x) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.asin(values[i]);
         }
@@ -6850,7 +6872,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.acos = function (x) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.acos(values[i]);
         }
@@ -6858,7 +6880,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.atan = function (x) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.atan(values[i]);
         }
@@ -6866,7 +6888,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.sinh = function (x) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.sinh(values[i]);
         }
@@ -6874,7 +6896,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.cosh = function (x) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.cosh(values[i]);
         }
@@ -6882,7 +6904,7 @@ var MathBackendCPU = (function () {
     };
     MathBackendCPU.prototype.tanh = function (x) {
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = util.tanh(values[i]);
         }
@@ -6891,7 +6913,7 @@ var MathBackendCPU = (function () {
     MathBackendCPU.prototype.step = function (x, alpha) {
         if (alpha === void 0) { alpha = 0; }
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
             var value = values[i];
             if (util.isValNaN(value, x.dtype)) {
@@ -7081,7 +7103,7 @@ var MathBackendCPU = (function () {
         }
         var resultValues = new dtype(util.sizeFromShape(newShape));
         var result = ndarray_1.NDArray.make(newShape, { values: resultValues }, x.dtype);
-        var values = x.getValues();
+        var values = x.dataSync();
         for (var i = 0; i < result.size; ++i) {
             var newLoc = result.indexToLoc(i);
             var originalLoc = new Array(x.rank);
@@ -7099,7 +7121,7 @@ var MathBackendCPU = (function () {
             newShape[i] = x.shape[perm[i]];
         }
         var resultValues = new Float32Array(x.size);
-        var values = x.getValues();
+        var values = x.dataSync();
         var result = ndarray_1.NDArray.make(newShape, { values: resultValues });
         for (var i = 0; i < x.size; ++i) {
             var loc = x.indexToLoc(i);
@@ -7284,11 +7306,11 @@ var MathBackendCPU = (function () {
         return output;
     };
     MathBackendCPU.prototype.batchNormalization2D = function (x, mean, variance, varianceEpsilon, scale, offset) {
-        var xValues = x.getValues();
-        var meanValues = mean.getValues();
-        var varianceValues = variance.getValues();
-        var scaleValues = scale ? scale.getValues() : new Float32Array([1]);
-        var offsetValues = offset ? offset.getValues() : new Float32Array([0]);
+        var xValues = x.dataSync();
+        var meanValues = mean.dataSync();
+        var varianceValues = variance.dataSync();
+        var scaleValues = scale ? scale.dataSync() : [1];
+        var offsetValues = offset ? offset.dataSync() : [0];
         var outValues = new Float32Array(xValues.length);
         for (var i = 0; i < xValues.length; i++) {
             outValues[i] = offsetValues[i % offsetValues.length] +
@@ -7299,6 +7321,21 @@ var MathBackendCPU = (function () {
         return ndarray_1.Array2D.new(x.shape, outValues);
     };
     MathBackendCPU.prototype.batchNormalization3D = function (x, mean, variance, varianceEpsilon, scale, offset) {
+        var xValues = x.dataSync();
+        var meanValues = mean.dataSync();
+        var varianceValues = variance.dataSync();
+        var scaleValues = scale ? scale.dataSync() : [1];
+        var offsetValues = offset ? offset.dataSync() : [0];
+        var outValues = new Float32Array(xValues.length);
+        for (var i = 0; i < xValues.length; i++) {
+            outValues[i] = offsetValues[i % offsetValues.length] +
+                (xValues[i] - meanValues[i % meanValues.length]) *
+                    scaleValues[i % scaleValues.length] /
+                    Math.sqrt(varianceValues[i % varianceValues.length] + varianceEpsilon);
+        }
+        return ndarray_1.Array3D.new(x.shape, outValues);
+    };
+    MathBackendCPU.prototype.batchNormalization4D = function (x, mean, variance, varianceEpsilon, scale, offset) {
         var xValues = x.getValues();
         var meanValues = mean.getValues();
         var varianceValues = variance.getValues();
@@ -7311,14 +7348,14 @@ var MathBackendCPU = (function () {
                     scaleValues[i % scaleValues.length] /
                     Math.sqrt(varianceValues[i % varianceValues.length] + varianceEpsilon);
         }
-        return ndarray_1.Array3D.new(x.shape, outValues);
+        return ndarray_1.Array4D.new(x.shape, outValues);
     };
     MathBackendCPU.prototype.multinomial = function (probabilities, numSamples, seed) {
         var batchSize = probabilities.shape[0];
         var numEvents = probabilities.shape[1];
         var res = ndarray_1.Array2D.zeros([batchSize, numSamples], 'int32');
-        var resVals = res.getValues();
-        var probVals = probabilities.getValues();
+        var resVals = res.dataSync();
+        var probVals = probabilities.dataSync();
         for (var b = 0; b < batchSize; ++b) {
             var offset = b * numEvents;
             var cdf = new Float32Array(numEvents - 1);
@@ -7352,9 +7389,9 @@ var MathBackendCPU = (function () {
     MathBackendCPU.prototype.broadcastedBinaryOp = function (a, b, dtype, op) {
         var newShape = broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
         var result = ndarray_1.NDArray.zeros(newShape, dtype);
-        var newValues = result.getValues();
-        var aValues = a.getValues();
-        var bValues = b.getValues();
+        var newValues = result.dataSync();
+        var aValues = a.dataSync();
+        var bValues = b.dataSync();
         var aBroadcastDims = broadcast_util.getBroadcastDims(a.shape, newShape);
         var bBroadcastDims = broadcast_util.getBroadcastDims(b.shape, newShape);
         var _loop_1 = function (i) {
@@ -7424,7 +7461,7 @@ var BackendEngine = (function () {
         }
         var result = kernelFn();
         if (this.debugMode) {
-            var vals = result.getValues();
+            var vals = result.dataSync();
             var time = util.rightPad(performance.now() - start + "ms", 9);
             var paddedName = util.rightPad(kernelName, 25);
             var rank = result.rank;
@@ -7896,6 +7933,21 @@ var MathBackendWebGL = (function () {
         var program = new batchnorm_gpu_1.BatchNormProgram(x.shape, mean.shape, variance.shape, offsetShape, scaleShape, varianceEpsilon);
         return this.compileAndRun(program, inputs);
     };
+    MathBackendWebGL.prototype.batchNormalization4D = function (x, mean, variance, varianceEpsilon, scale, offset) {
+        var inputs = [x, mean, variance];
+        var offsetShape = null;
+        if (offset != null) {
+            offsetShape = offset.shape;
+            inputs.push(offset);
+        }
+        var scaleShape = null;
+        if (scale != null) {
+            scaleShape = scale.shape;
+            inputs.push(scale);
+        }
+        var program = new batchnorm_gpu_1.BatchNormProgram(x.shape, mean.shape, variance.shape, offsetShape, scaleShape, varianceEpsilon);
+        return this.compileAndRun(program, inputs);
+    };
     MathBackendWebGL.prototype.tile = function (x, reps) {
         var program = new tile_gpu_1.TileProgram(x.shape, reps);
         return this.compileAndRun(program, [x]);
@@ -7981,12 +8033,20 @@ var MathBackendWebGL = (function () {
         var a2D = x.as2D(-1, inSize);
         return this.reduce(a2D, 'min', a2D.dtype).reshape(outShape);
     };
+    MathBackendWebGL.prototype.minimum = function (a, b) {
+        var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.MIN, a.shape, b.shape);
+        return this.compileAndRun(program, [a, b]);
+    };
     MathBackendWebGL.prototype.max = function (x, axes) {
         axis_util.assertAxesAreInnerMostDims('max', axes, x.rank);
         var _a = axis_util.computeOutAndReduceShapes(x.shape, axes), outShape = _a[0], reduceShape = _a[1];
         var inSize = util.sizeFromShape(reduceShape);
         var a2D = x.as2D(-1, inSize);
         return this.reduce(a2D, 'max', a2D.dtype).reshape(outShape);
+    };
+    MathBackendWebGL.prototype.maximum = function (a, b) {
+        var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.MAX, a.shape, b.shape);
+        return this.compileAndRun(program, [a, b]);
     };
     MathBackendWebGL.prototype.divide = function (a, b) {
         var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.DIV, a.shape, b.shape);
@@ -8370,8 +8430,14 @@ var KERNEL_METHODS = {
     Min: function (backend, config) {
         return backend.min(config.inputs.x, config.args.axes);
     },
+    Minimum: function (backend, config) {
+        return backend.minimum(config.inputs.a, config.inputs.b);
+    },
     Max: function (backend, config) {
         return backend.max(config.inputs.x, config.args.axes);
+    },
+    Maximum: function (backend, config) {
+        return backend.maximum(config.inputs.a, config.inputs.b);
     },
     Ceil: function (backend, config) {
         return backend.ceil(config.inputs.x);
@@ -8489,6 +8555,9 @@ var KERNEL_METHODS = {
     },
     ResizeBilinear3D: function (backend, config) {
         return backend.resizeBilinear3D(config.inputs.x, config.args.newShape2D, config.args.alignCorners);
+    },
+    BatchNorm4D: function (backend, config) {
+        return backend.batchNormalization4D(config.inputs.x, config.inputs.mean, config.inputs.variance, config.args.varianceEpsilon, config.inputs.scale, config.inputs.offset);
     },
     BatchNorm3D: function (backend, config) {
         return backend.batchNormalization3D(config.inputs.x, config.inputs.mean, config.inputs.variance, config.args.varianceEpsilon, config.inputs.scale, config.inputs.offset);
@@ -8776,14 +8845,17 @@ exports.BatchNormProgram = BatchNormProgram;
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var broadcast_util = require("../../broadcast_util");
+var CHECK_NAN_SNIPPET = "\n  if (isNaN(a)) return a;\n  if (isNaN(b)) return b;\n";
 exports.ADD = 'return a + b;';
 exports.SUB = 'return a - b;';
 exports.MUL = 'return a * b;';
 exports.DIV = 'return a / b;';
 exports.POW = "\n  return (round(mod(b, 2.0)) == 0 || round(mod(b, 2.0)) == 2) ?\n      pow(abs(a), b) : sign(a) * pow(abs(a), b);\n";
-exports.EQUAL = "\n  if (isNaN(a)) return a;\n  if (isNaN(b)) return b;\n  return float(a == b);\n";
+exports.EQUAL = CHECK_NAN_SNIPPET + "\n  return float(a == b);\n";
 exports.PRELU = "\n  return (a >= 0.0) ? a : b * a;\n";
 exports.PRELU_DER = "\n  return (a > 0.0) ? 1.0 : ((a < 0.0) ? b : a);\n";
+exports.MAX = CHECK_NAN_SNIPPET + "\n  return max(a, b);\n";
+exports.MIN = CHECK_NAN_SNIPPET + "\n  return min(a, b);\n";
 var BinaryOpProgram = (function () {
     function BinaryOpProgram(op, aShape, bShape) {
         this.variableNames = ['A', 'B'];
@@ -10764,9 +10836,9 @@ var UnaryOpProgram = (function () {
     return UnaryOpProgram;
 }());
 exports.UnaryOpProgram = UnaryOpProgram;
-exports.CHECK_NAN_SNIPPET = "\n  if (isNaN(x)) {\n    return x;\n  }\n";
+var CHECK_NAN_SNIPPET = "\n  if (isNaN(x)) return x;\n";
 exports.ABS = "\n  return abs(x);\n";
-exports.RELU = exports.CHECK_NAN_SNIPPET + "\n  return (x < 0.0) ? 0.0 : x;\n";
+exports.RELU = CHECK_NAN_SNIPPET + "\n  return (x < 0.0) ? 0.0 : x;\n";
 exports.ELU = "\n  return (x >= 0.0) ? x : (exp(x) - 1.0);\n";
 exports.ELU_DER = "\n  return (x >= 0.0) ? 1.0 : exp(x);\n";
 exports.SELU = "\n  // Stable and Attracting Fixed Point (0, 1) for Normalized Weights.\n  // see: https://arxiv.org/abs/1706.02515\n  float scaleAlpha = 1.7580993408473768599402175208123;\n  float scale = 1.0507009873554804934193349852946;\n  return (x >= 0.0) ? scale * x : scaleAlpha * (exp(x) - 1.0);\n";
@@ -10776,7 +10848,7 @@ function LEAKY_RELU(alpha) {
 exports.LEAKY_RELU = LEAKY_RELU;
 function STEP(alpha) {
     if (alpha === void 0) { alpha = 0.0; }
-    return exports.CHECK_NAN_SNIPPET + ("\n    return x > 0.0 ? 1.0 : float(" + alpha + ");\n  ");
+    return CHECK_NAN_SNIPPET + ("\n    return x > 0.0 ? 1.0 : float(" + alpha + ");\n  ");
 }
 exports.STEP = STEP;
 exports.NEG = "\n  return -x;\n";
@@ -10784,14 +10856,14 @@ exports.CEIL = "\n  return ceil(x);\n";
 exports.FLOOR = "\n  return floor(x);\n";
 exports.EXP = "\n  return exp(x);\n";
 exports.LOG = "\n  return log(x);\n";
-exports.SQRT = exports.CHECK_NAN_SNIPPET + "\n  return sqrt(x);\n";
+exports.SQRT = CHECK_NAN_SNIPPET + "\n  return sqrt(x);\n";
 exports.SIGMOID = "\n  return 1.0 / (1.0 + exp(-1.0 * x));\n";
-exports.SIN = exports.CHECK_NAN_SNIPPET + "\n  return sin(x);\n";
-exports.COS = exports.CHECK_NAN_SNIPPET + "\n  return cos(x);\n";
+exports.SIN = CHECK_NAN_SNIPPET + "\n  return sin(x);\n";
+exports.COS = CHECK_NAN_SNIPPET + "\n  return cos(x);\n";
 exports.TAN = "\n  return tan(x);\n";
-exports.ASIN = exports.CHECK_NAN_SNIPPET + "\n  return asin(x);\n";
-exports.ACOS = exports.CHECK_NAN_SNIPPET + "\n  return acos(x);\n";
-exports.ATAN = exports.CHECK_NAN_SNIPPET + "\n  return atan(x);\n";
+exports.ASIN = CHECK_NAN_SNIPPET + "\n  return asin(x);\n";
+exports.ACOS = CHECK_NAN_SNIPPET + "\n  return acos(x);\n";
+exports.ATAN = CHECK_NAN_SNIPPET + "\n  return atan(x);\n";
 exports.SINH = "\n  float e2x = exp(x);\n  return (e2x - 1.0 / e2x) / 2.0;\n";
 exports.COSH = "\n  float e2x = exp(-x);\n  return (e2x + 1.0 / e2x) / 2.0;\n";
 exports.TANH = "\n  float e2x = exp(-2.0 * abs(x));\n  return sign(x) * (1.0 - e2x) / (1.0 + e2x);\n";
@@ -11352,6 +11424,7 @@ var NDArrayMath = (function () {
     function NDArrayMath(backend, safeMode) {
         this.registeredArrays = new Set();
         this.customBackend = false;
+        this.registeredVariables = new Map();
         if (typeof backend === 'string') {
             this.backend = environment_1.ENV.getBackend(backend);
         }
@@ -11373,6 +11446,12 @@ var NDArrayMath = (function () {
         }
         this.registeredArrays.add(a.id);
         this.backendEngine.track(a);
+    };
+    NDArrayMath.prototype.registerVariable = function (v) {
+        if (this.registeredVariables.has(v.name)) {
+            throw new Error("Variable with name " + v.name + " was already registered");
+        }
+        this.registeredVariables.set(v.name, v);
     };
     NDArrayMath.prototype.writePixels = function (id, pixels, numChannels) {
         this.backend.writePixels(id, pixels, numChannels);
@@ -11412,7 +11491,7 @@ var NDArrayMath = (function () {
         return this.backendEngine.keep(result);
     };
     NDArrayMath.prototype.track = function (result) {
-        return this.backendEngine.track(result);
+        return result;
     };
     NDArrayMath.prototype.dispose = function () {
         if (this.customBackend) {
@@ -11614,6 +11693,7 @@ var NDArrayMath = (function () {
         }); });
     };
     NDArrayMath.prototype.equal = function (a, b) {
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
         return this.backendEngine.executeKernel('Equal', { inputs: { a: a, b: b } });
     };
     NDArrayMath.prototype.equalStrict = function (a, b) {
@@ -11654,6 +11734,12 @@ var NDArrayMath = (function () {
             return res;
         });
     };
+    NDArrayMath.prototype.minimum = function (a, b) {
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        util.assert(a.dtype === b.dtype, "The dtypes of the first (" + a.dtype + ") and " +
+            ("second (" + b.dtype + ") input must match"));
+        return this.backendEngine.executeKernel('Minimum', { inputs: { a: a, b: b } });
+    };
     NDArrayMath.prototype.max = function (x, axis, keepDims) {
         var _this = this;
         if (axis === void 0) { axis = null; }
@@ -11673,6 +11759,12 @@ var NDArrayMath = (function () {
             }
             return res;
         });
+    };
+    NDArrayMath.prototype.maximum = function (a, b) {
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        util.assert(a.dtype === b.dtype, "The dtypes of the first (" + a.dtype + ") and " +
+            ("second (" + b.dtype + ") input must match"));
+        return this.backendEngine.executeKernel('Maximum', { inputs: { a: a, b: b } });
     };
     NDArrayMath.prototype.softmax = function (logits, dim) {
         var _this = this;
@@ -11785,7 +11877,8 @@ var NDArrayMath = (function () {
         broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
         return this.backendEngine.executeKernel('Mul', { inputs: { a: a, b: b } }, function (dy, y) {
             if (!util.arraysEqual(a.shape, b.shape)) {
-                throw new Error("Backprop through broadcasted multiply not supported yet.");
+                throw new Error("Backprop through broadcasted multiply not " +
+                    "supported yet.");
             }
             return { a: function () { return _this.clone(b); }, b: function () { return _this.clone(a); } };
         });
@@ -12199,6 +12292,24 @@ var NDArrayMath = (function () {
         }
         return this.backendEngine.executeKernel('BatchNorm3D', { inputs: { x: x, mean: mean, variance: variance, scale: scale, offset: offset }, args: { varianceEpsilon: varianceEpsilon } });
     };
+    NDArrayMath.prototype.batchNormalization4D = function (x, mean, variance, varianceEpsilon, scale, offset) {
+        if (varianceEpsilon === void 0) { varianceEpsilon = .001; }
+        util.assert(x.rank === 4, "Error in batchNormalization4D: x must be rank 4 but got rank " +
+            (x.rank + "."));
+        util.assert(mean.rank === 4 || mean.rank === 1, "Error in batchNormalization4D: mean must be rank 4 or rank 1 but " +
+            ("got rank " + mean.rank + "."));
+        util.assert(variance.rank === 4 || variance.rank === 1, "Error in batchNormalization4D: variance must be rank 4 or rank 1 " +
+            ("but got rank " + variance.rank + "."));
+        if (scale != null) {
+            util.assert(scale.rank === 4 || scale.rank === 1, "Error in batchNormalization4D: scale must be rank 4 or rank 1 " +
+                ("but got rank " + scale.rank + "."));
+        }
+        if (offset != null) {
+            util.assert(offset.rank === 4 || offset.rank === 1, "Error in batchNormalization4D: offset must be rank 4 or rank 1 " +
+                ("but got rank " + offset.rank + "."));
+        }
+        return this.backendEngine.executeKernel('BatchNorm4D', { inputs: { x: x, mean: mean, variance: variance, scale: scale, offset: offset }, args: { varianceEpsilon: varianceEpsilon } });
+    };
     NDArrayMath.prototype.multiRNNCell = function (lstmCells, data, c, h) {
         var res = this.scope(function () {
             var input = data;
@@ -12465,6 +12576,7 @@ var NDArray = (function () {
             }
         }
         this.id = id;
+        this.rankType = (this.rank < 5 ? this.rank.toString() : 'higher');
         if (this.id == null) {
             this.id = NDArray.nextId++;
             this.math.register(this);
@@ -12582,7 +12694,7 @@ var NDArray = (function () {
         for (var i = 0; i < locs.length - 1; ++i) {
             index += this.strides[i] * locs[i];
         }
-        return this.getValues()[index];
+        return this.dataSync()[index];
     };
     NDArray.prototype.add = function (value) {
         var locs = [];
@@ -12603,7 +12715,7 @@ var NDArray = (function () {
         for (var i = 0; i < locs.length - 1; ++i) {
             index += this.strides[i] * locs[i];
         }
-        var vals = this.getValues();
+        var vals = this.dataSync();
         vals[index] = value;
         this.math.write(this.id, vals, this.dtype, this.shape);
     };
@@ -12645,7 +12757,7 @@ var NDArray = (function () {
     };
     NDArray.prototype.fill = function (value) {
         this.throwIfDisposed();
-        var vals = this.getValues();
+        var vals = this.dataSync();
         vals.fill(value);
         this.math.write(this.id, vals, this.dtype, this.shape);
     };
@@ -12674,7 +12786,7 @@ var NDArray = (function () {
     NDArray.prototype.equals = function (t) {
         this.throwIfDisposed();
         return this.dtype === t.dtype && util.arraysEqual(this.shape, t.shape) &&
-            util.arraysEqual(this.getValues(), t.getValues());
+            util.arraysEqual(this.dataSync(), t.dataSync());
     };
     NDArray.rand = function (shape, randFunction, dtype) {
         var size = util.sizeFromShape(shape);
@@ -12736,7 +12848,7 @@ var Scalar = (function (_super) {
         return new Scalar([], dtype, toTypedArray(values, dtype));
     };
     Scalar.prototype.get = function () {
-        return this.getValues()[0];
+        return this.dataSync()[0];
     };
     Scalar.prototype.val = function () {
         return __awaiter(this, void 0, void 0, function () {
@@ -12751,7 +12863,7 @@ var Scalar = (function (_super) {
         });
     };
     Scalar.prototype.add = function (value) {
-        this.getValues()[0] += value;
+        this.dataSync()[0] += value;
     };
     Scalar.prototype.asType = function (dtype) {
         return _super.prototype.asType.call(this, dtype);
@@ -12779,7 +12891,7 @@ var Array1D = (function (_super) {
         return new Array1D([values.length], dtype, toTypedArray(values, dtype));
     };
     Array1D.prototype.get = function (i) {
-        return this.getValues()[i];
+        return this.dataSync()[i];
     };
     Array1D.prototype.val = function (i) {
         return __awaiter(this, void 0, void 0, function () {
@@ -12794,7 +12906,7 @@ var Array1D = (function (_super) {
         });
     };
     Array1D.prototype.add = function (value, i) {
-        this.getValues()[i] += value;
+        this.dataSync()[i] += value;
     };
     Array1D.prototype.locToIndex = function (loc) {
         return loc[0];
@@ -12856,10 +12968,10 @@ var Array2D = (function (_super) {
         return new Array2D(shape, dtype, toTypedArray(values, dtype));
     };
     Array2D.prototype.get = function (i, j) {
-        return this.getValues()[this.stride0 * i + j];
+        return this.dataSync()[this.stride0 * i + j];
     };
     Array2D.prototype.add = function (value, i, j) {
-        this.getValues()[this.stride0 * i + j] += value;
+        this.dataSync()[this.stride0 * i + j] += value;
     };
     Array2D.prototype.val = function (i, j) {
         return __awaiter(this, void 0, void 0, function () {
@@ -12934,7 +13046,7 @@ var Array3D = (function (_super) {
         return new Array3D(shape, dtype, toTypedArray(values, dtype));
     };
     Array3D.prototype.get = function (i, j, k) {
-        return this.getValues()[this.stride0 * i + this.stride1 * j + k];
+        return this.dataSync()[this.stride0 * i + this.stride1 * j + k];
     };
     Array3D.prototype.val = function (i, j, k) {
         return __awaiter(this, void 0, void 0, function () {
@@ -12949,7 +13061,7 @@ var Array3D = (function (_super) {
         });
     };
     Array3D.prototype.add = function (value, i, j, k) {
-        this.getValues()[this.stride0 * i + this.stride1 * j + k] += value;
+        this.dataSync()[this.stride0 * i + this.stride1 * j + k] += value;
     };
     Array3D.prototype.locToIndex = function (locs) {
         return this.stride0 * locs[0] + this.stride1 * locs[1] + locs[2];
@@ -12959,11 +13071,11 @@ var Array3D = (function (_super) {
         index -= i * this.stride0;
         return [i, Math.floor(index / this.stride1), index % this.stride1];
     };
-    Array3D.prototype.asType = function (dtype) {
-        return _super.prototype.asType.call(this, dtype);
-    };
     Array3D.ones = function (shape, dtype) {
         return NDArray.ones(shape, dtype);
+    };
+    Array3D.prototype.asType = function (dtype) {
+        return _super.prototype.asType.call(this, dtype);
     };
     Array3D.zeros = function (shape, dtype) {
         return NDArray.zeros(shape, dtype);
@@ -13015,7 +13127,8 @@ var Array4D = (function (_super) {
         return new Array4D(shape, dtype, toTypedArray(values, dtype));
     };
     Array4D.prototype.get = function (i, j, k, l) {
-        return this.getValues()[this.stride0 * i + this.stride1 * j + this.stride2 * k + l];
+        return this
+            .dataSync()[this.stride0 * i + this.stride1 * j + this.stride2 * k + l];
     };
     Array4D.prototype.val = function (i, j, k, l) {
         return __awaiter(this, void 0, void 0, function () {
@@ -13030,7 +13143,7 @@ var Array4D = (function (_super) {
         });
     };
     Array4D.prototype.add = function (value, i, j, k, l) {
-        this.getValues()[this.stride0 * i + this.stride1 * j + this.stride2 * k + l] += value;
+        this.dataSync()[this.stride0 * i + this.stride1 * j + this.stride2 * k + l] += value;
     };
     Array4D.prototype.locToIndex = function (locs) {
         return this.stride0 * locs[0] + this.stride1 * locs[1] +
@@ -13334,7 +13447,14 @@ function skewness(values) {
     return (1 / n) * sum3 / Math.pow((1 / (n - 1)) * sum2, 3 / 2);
 }
 exports.skewness = skewness;
-function jarqueBeraNormalityTest(values) {
+function jarqueBeraNormalityTest(a) {
+    var values;
+    if (a instanceof ndarray_1.NDArray) {
+        values = a.dataSync();
+    }
+    else {
+        values = a;
+    }
     var n = values.length;
     var s = skewness(values);
     var k = kurtosis(values);
@@ -13347,9 +13467,16 @@ function jarqueBeraNormalityTest(values) {
 exports.jarqueBeraNormalityTest = jarqueBeraNormalityTest;
 function expectArrayInMeanStdRange(actual, expectedMean, expectedStdDev, epsilon) {
     if (epsilon === void 0) { epsilon = exports.TEST_EPSILON; }
-    var actualMean = mean(actual);
+    var actualValues;
+    if (actual instanceof ndarray_1.NDArray) {
+        actualValues = actual.dataSync();
+    }
+    else {
+        actualValues = actual;
+    }
+    var actualMean = mean(actualValues);
     expectNumbersClose(actualMean, expectedMean, epsilon);
-    expectNumbersClose(standardDeviation(actual, actualMean), expectedStdDev, epsilon);
+    expectNumbersClose(standardDeviation(actualValues, actualMean), expectedStdDev, epsilon);
 }
 exports.expectArrayInMeanStdRange = expectArrayInMeanStdRange;
 function expectArraysClose(actual, expected, epsilon) {
@@ -13393,7 +13520,7 @@ function expectArraysClose(actual, expected, epsilon) {
     for (var i = 0; i < expectedValues.length; ++i) {
         var a = actualValues[i];
         var e = expectedValues[i];
-        if (!areClose(a, e, epsilon)) {
+        if (!areClose(a, Number(e), epsilon)) {
             var actualStr = "actual[" + i + "] === " + a;
             var expectedStr = "expected[" + i + "] === " + e;
             throw new Error('Arrays differ: ' + actualStr + ', ' + expectedStr);
@@ -13401,6 +13528,10 @@ function expectArraysClose(actual, expected, epsilon) {
     }
 }
 exports.expectArraysClose = expectArraysClose;
+function expectArraysEqual(actual, expected) {
+    return expectArraysClose(actual, expected, 0);
+}
+exports.expectArraysEqual = expectArraysEqual;
 function expectNumbersClose(a, e, epsilon) {
     if (epsilon === void 0) { epsilon = exports.TEST_EPSILON; }
     if (!areClose(a, e, epsilon)) {
@@ -13418,9 +13549,16 @@ function areClose(a, e, epsilon) {
     return true;
 }
 function expectValuesInRange(actual, low, high) {
-    for (var i = 0; i < actual.length; i++) {
-        if (actual[i] < low || actual[i] > high) {
-            throw new Error("Value out of range:" + actual[i] + " low: " + low + ", high: " + high);
+    var actualVals;
+    if (actual instanceof ndarray_1.NDArray) {
+        actualVals = actual.dataSync();
+    }
+    else {
+        actualVals = actual;
+    }
+    for (var i = 0; i < actualVals.length; i++) {
+        if (actualVals[i] < low || actualVals[i] > high) {
+            throw new Error("Value out of range:" + actualVals[i] + " low: " + low + ", high: " + high);
         }
     }
 }
@@ -13608,6 +13746,11 @@ function assertShapesMatch(shapeA, shapeB, errorMessagePrefix) {
     assert(arraysEqual(shapeA, shapeB), errorMessagePrefix + ("Shapes " + shapeA + " and " + shapeB + " must match"));
 }
 exports.assertShapesMatch = assertShapesMatch;
+function assertTypesMatch(a, b) {
+    assert(a.dtype === b.dtype, "The dtypes of the first (" + a.dtype + ") and " +
+        ("second (" + b.dtype + ") input must match"));
+}
+exports.assertTypesMatch = assertTypesMatch;
 function flatten(arr, ret) {
     if (ret === void 0) { ret = []; }
     if (Array.isArray(arr)) {
@@ -13883,7 +14026,7 @@ exports.unflattenToNameArrayMap = unflattenToNameArrayMap;
 },{"./math/ndarray":94}],101:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var version = '0.3.16';
+var version = '0.3.17';
 exports.version = version;
 
 },{}],102:[function(require,module,exports){
