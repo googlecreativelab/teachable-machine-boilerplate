@@ -19,6 +19,10 @@ var _deeplearnKnnImageClassifier = require('deeplearn-knn-image-classifier');
 
 var _deeplearn = require('deeplearn');
 
+var dl = _interopRequireWildcard(_deeplearn);
+
+function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) newObj[key] = obj[key]; } } newObj.default = obj; return newObj; } }
+
 function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -42,7 +46,7 @@ var Main = function () {
     this.videoPlaying = false;
 
     // Initiate deeplearn.js math and knn classifier objects
-    this.knn = new _deeplearnKnnImageClassifier.KNNImageClassifier(NUM_CLASSES, TOPK, _deeplearn.ENV.math);
+    this.knn = new _deeplearnKnnImageClassifier.KNNImageClassifier(NUM_CLASSES, TOPK);
 
     // Create video element that will contain the webcam image
     this.video = document.createElement('video');
@@ -125,7 +129,7 @@ var Main = function () {
 
       if (this.videoPlaying) {
         // Get image data from video element
-        var image = _deeplearn.Array3D.fromPixels(this.video);
+        var image = dl.fromPixels(this.video);
 
         // Train class if one of the buttons is held down
         if (this.training != -1) {
@@ -170,7 +174,7 @@ window.addEventListener('load', function () {
   return new Main();
 });
 
-},{"deeplearn":51,"deeplearn-knn-image-classifier":3}],2:[function(require,module,exports){
+},{"deeplearn":67,"deeplearn-knn-image-classifier":3}],2:[function(require,module,exports){
 
 },{}],3:[function(require,module,exports){
 "use strict";
@@ -216,23 +220,22 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-var deeplearn_1 = require("deeplearn");
+var dl = require("deeplearn");
 var deeplearn_squeezenet_1 = require("deeplearn-squeezenet");
 var model_util = require("../util");
 var KNNImageClassifier = (function () {
-    function KNNImageClassifier(numClasses, k, math) {
+    function KNNImageClassifier(numClasses, k) {
         this.numClasses = numClasses;
         this.k = k;
-        this.math = math;
         this.classLogitsMatrices = [];
         this.classExampleCount = [];
         this.varsLoaded = false;
-        this.squashLogitsDenominator = deeplearn_1.Scalar.new(300);
+        this.squashLogitsDenominator = dl.scalar(300);
         for (var i = 0; i < this.numClasses; i++) {
             this.classLogitsMatrices.push(null);
             this.classExampleCount.push(0);
         }
-        this.squeezeNet = new deeplearn_squeezenet_1.SqueezeNet(this.math);
+        this.squeezeNet = new deeplearn_squeezenet_1.SqueezeNet();
     }
     KNNImageClassifier.prototype.load = function () {
         return __awaiter(this, void 0, void 0, function () {
@@ -266,7 +269,7 @@ var KNNImageClassifier = (function () {
             console.warn('Cannot add to invalid class ${classIndex}');
         }
         this.clearTrainLogitsMatrix();
-        this.math.scope(function (keep, track) {
+        dl.tidy(function () {
             var logits = _this.squeezeNet.predict(image);
             var imageLogits = _this.normalizeVector(logits);
             var logitsSize = imageLogits.shape[0];
@@ -274,11 +277,13 @@ var KNNImageClassifier = (function () {
                 _this.classLogitsMatrices[classIndex] = imageLogits.as2D(1, logitsSize);
             }
             else {
-                var newTrainLogitsMatrix = _this.math.concat2D(_this.classLogitsMatrices[classIndex].as2D(_this.classExampleCount[classIndex], logitsSize), imageLogits.as2D(1, logitsSize), 0);
+                var newTrainLogitsMatrix = _this.classLogitsMatrices[classIndex]
+                    .as2D(_this.classExampleCount[classIndex], logitsSize)
+                    .concat(imageLogits.as2D(1, logitsSize), 0);
                 _this.classLogitsMatrices[classIndex].dispose();
                 _this.classLogitsMatrices[classIndex] = newTrainLogitsMatrix;
             }
-            keep(_this.classLogitsMatrices[classIndex]);
+            dl.keep(_this.classLogitsMatrices[classIndex]);
             _this.classExampleCount[classIndex]++;
         });
     };
@@ -287,7 +292,7 @@ var KNNImageClassifier = (function () {
         if (!this.varsLoaded) {
             throw new Error('Cannot predict until vars have been loaded.');
         }
-        return this.math.scope(function (keep) {
+        return dl.tidy(function () {
             var logits = _this.squeezeNet.predict(image);
             var imageLogits = _this.normalizeVector(logits);
             var logitsSize = imageLogits.shape[0];
@@ -302,10 +307,10 @@ var KNNImageClassifier = (function () {
                 console.warn('Cannot predict without providing training images.');
                 return null;
             }
-            keep(_this.trainLogitsMatrix);
+            dl.keep(_this.trainLogitsMatrix);
             var numExamples = _this.getNumExamples();
-            return _this.math
-                .matMul(_this.trainLogitsMatrix.as2D(numExamples, logitsSize), imageLogits.as2D(logitsSize, 1))
+            return _this.trainLogitsMatrix.as2D(numExamples, logitsSize)
+                .matMul(imageLogits.as2D(logitsSize, 1))
                 .as1D();
         });
     };
@@ -378,19 +383,17 @@ var KNNImageClassifier = (function () {
             return null;
         }
         if (ndarray1 == null) {
-            return this.math.clone(ndarray2);
+            return ndarray2.clone();
         }
         else if (ndarray2 === null) {
-            return this.math.clone(ndarray1);
+            return ndarray1.clone();
         }
-        return this.math.concat2D(ndarray1, ndarray2, 0);
+        return ndarray1.concat(ndarray2, 0);
     };
     KNNImageClassifier.prototype.normalizeVector = function (vec) {
-        var squashedVec = this.math.divide(vec, this.squashLogitsDenominator);
-        var squared = this.math.multiplyStrict(squashedVec, squashedVec);
-        var sum = this.math.sum(squared);
-        var sqrtSum = this.math.sqrt(sum);
-        return this.math.divide(squashedVec, sqrtSum);
+        var squashedVec = dl.div(vec, this.squashLogitsDenominator);
+        var sqrtSum = squashedVec.square().sum().sqrt();
+        return dl.div(squashedVec, sqrtSum);
     };
     KNNImageClassifier.prototype.getNumExamples = function () {
         var total = 0;
@@ -409,7 +412,7 @@ var KNNImageClassifier = (function () {
 }());
 exports.KNNImageClassifier = KNNImageClassifier;
 
-},{"../util":5,"deeplearn":51,"deeplearn-squeezenet":7}],5:[function(require,module,exports){
+},{"../util":5,"deeplearn":67,"deeplearn-squeezenet":7}],5:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 function topK(values, k) {
@@ -1501,14 +1504,13 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-var deeplearn_1 = require("deeplearn");
+var dl = require("deeplearn");
 var model_util = require("../util");
 var imagenet_classes_1 = require("./imagenet_classes");
 var GOOGLE_CLOUD_STORAGE_DIR = 'https://storage.googleapis.com/learnjs-data/checkpoint_zoo/';
 var SqueezeNet = (function () {
-    function SqueezeNet(math) {
-        this.math = math;
-        this.preprocessOffset = deeplearn_1.Array1D.new([103.939, 116.779, 123.68]);
+    function SqueezeNet() {
+        this.preprocessOffset = dl.tensor1d([103.939, 116.779, 123.68]);
     }
     SqueezeNet.prototype.load = function () {
         return __awaiter(this, void 0, void 0, function () {
@@ -1516,7 +1518,7 @@ var SqueezeNet = (function () {
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
-                        checkpointLoader = new deeplearn_1.CheckpointLoader(GOOGLE_CLOUD_STORAGE_DIR + 'squeezenet1_1/');
+                        checkpointLoader = new dl.CheckpointLoader(GOOGLE_CLOUD_STORAGE_DIR + 'squeezenet1_1/');
                         _a = this;
                         return [4, checkpointLoader.getAllVariables()];
                     case 1:
@@ -1531,15 +1533,17 @@ var SqueezeNet = (function () {
     };
     SqueezeNet.prototype.predictWithActivation = function (input, activationName) {
         var _this = this;
-        var _a = this.math.scope(function () {
+        return dl.tidy(function () {
             var activation;
-            var preprocessedInput = _this.math.subtract(input.asType('float32'), _this.preprocessOffset);
-            var conv1 = _this.math.conv2d(preprocessedInput, _this.variables['conv1_W:0'], _this.variables['conv1_b:0'], 2, 0);
-            var conv1relu = _this.math.relu(conv1);
+            var preprocessedInput = dl.sub(input.asType('float32'), _this.preprocessOffset);
+            var conv1relu = preprocessedInput
+                .conv2d(_this.variables['conv1_W:0'], 2, 0)
+                .add(_this.variables['conv1_b:0'])
+                .relu();
             if (activationName === 'conv_1') {
                 activation = conv1relu;
             }
-            var pool1 = _this.math.maxPool(conv1relu, 3, 2, 0);
+            var pool1 = conv1relu.maxPool(3, 2, 0);
             if (activationName === 'maxpool_1') {
                 activation = pool1;
             }
@@ -1551,7 +1555,7 @@ var SqueezeNet = (function () {
             if (activationName === 'fire3') {
                 activation = fire3;
             }
-            var pool2 = _this.math.maxPool(fire3, 3, 2, 'valid');
+            var pool2 = fire3.maxPool(3, 2, 'valid');
             if (activationName === 'maxpool_2') {
                 activation = pool2;
             }
@@ -1563,7 +1567,7 @@ var SqueezeNet = (function () {
             if (activationName === 'fire5') {
                 activation = fire5;
             }
-            var pool3 = _this.math.maxPool(fire5, 3, 2, 0);
+            var pool3 = fire5.maxPool(3, 2, 0);
             if (activationName === 'maxpool_3') {
                 activation = pool3;
             }
@@ -1583,34 +1587,37 @@ var SqueezeNet = (function () {
             if (activationName === 'fire9') {
                 activation = fire9;
             }
-            var conv10 = _this.math.conv2d(fire9, _this.variables['conv10_W:0'], _this.variables['conv10_b:0'], 1, 0);
+            var conv10 = fire9.conv2d(_this.variables['conv10_W:0'], 1, 0)
+                .add(_this.variables['conv10_b:0']);
             if (activationName === 'conv10') {
                 activation = conv10;
             }
-            return [
-                _this.math.avgPool(conv10, conv10.shape[0], 1, 0).as1D(), activation
-            ];
-        }), logits = _a[0], activation = _a[1];
-        return { activation: activation, logits: logits };
+            return {
+                logits: dl.avgPool(conv10, conv10.shape[0], 1, 0).as1D(),
+                activation: activation
+            };
+        });
     };
     SqueezeNet.prototype.fireModule = function (input, fireId) {
-        var y1 = this.math.conv2d(input, this.variables["fire" + fireId + "/squeeze1x1_W:0"], this.variables["fire" + fireId + "/squeeze1x1_b:0"], 1, 0);
-        var y2 = this.math.relu(y1);
-        var left1 = this.math.conv2d(y2, this.variables["fire" + fireId + "/expand1x1_W:0"], this.variables["fire" + fireId + "/expand1x1_b:0"], 1, 0);
-        var left2 = this.math.relu(left1);
-        var right1 = this.math.conv2d(y2, this.variables["fire" + fireId + "/expand3x3_W:0"], this.variables["fire" + fireId + "/expand3x3_b:0"], 1, 1);
-        var right2 = this.math.relu(right1);
-        return this.math.concat3D(left2, right2, 2);
+        var y = dl.conv2d(input, this.variables["fire" + fireId + "/squeeze1x1_W:0"], 1, 0)
+            .add(this.variables["fire" + fireId + "/squeeze1x1_b:0"])
+            .relu();
+        var left = dl.conv2d(y, this.variables["fire" + fireId + "/expand1x1_W:0"], 1, 0)
+            .add(this.variables["fire" + fireId + "/expand1x1_b:0"])
+            .relu();
+        var right = dl.conv2d(y, this.variables["fire" + fireId + "/expand3x3_W:0"], 1, 1)
+            .add(this.variables["fire" + fireId + "/expand3x3_b:0"])
+            .relu();
+        return left.concat(right, 2);
     };
     SqueezeNet.prototype.getTopKClasses = function (logits, topK) {
         return __awaiter(this, void 0, void 0, function () {
-            var _this = this;
             var predictions, topk, _a, _b, topkIndices, topkValues, topClassesToProbability, i;
             return __generator(this, function (_c) {
                 switch (_c.label) {
                     case 0:
-                        predictions = this.math.scope(function () {
-                            return _this.math.softmax(logits).asType('float32');
+                        predictions = dl.tidy(function () {
+                            return dl.softmax(logits).asType('float32');
                         });
                         _b = (_a = model_util).topK;
                         return [4, predictions.data()];
@@ -1638,12 +1645,2013 @@ var SqueezeNet = (function () {
 }());
 exports.SqueezeNet = SqueezeNet;
 
-},{"../util":9,"./imagenet_classes":6,"deeplearn":51}],9:[function(require,module,exports){
+},{"../util":9,"./imagenet_classes":6,"deeplearn":67}],9:[function(require,module,exports){
 arguments[4][5][0].apply(exports,arguments)
 },{"dup":5}],10:[function(require,module,exports){
 "use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../math/ndarray");
+var doc_1 = require("./doc");
+var BrowserUtil = (function () {
+    function BrowserUtil() {
+    }
+    BrowserUtil.nextFrame = function () {
+        return new Promise(function (resolve) { return requestAnimationFrame(function () { return resolve(); }); });
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Performance', subheading: 'Timing' })
+    ], BrowserUtil, "nextFrame", null);
+    return BrowserUtil;
+}());
+exports.BrowserUtil = BrowserUtil;
+
+},{"./doc":32}],11:[function(require,module,exports){
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var tensor_1 = require("../../tensor");
+var util = require("../../util");
+var BatchDataset = (function () {
+    function BatchDataset(base, batchSize, smallLastBatch) {
+        if (smallLastBatch === void 0) { smallLastBatch = true; }
+        this.base = base;
+        this.batchSize = batchSize;
+        this.smallLastBatch = smallLastBatch;
+    }
+    BatchDataset.prototype.getStream = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var batchesAsArrays;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, this.base.getStream()];
+                    case 1:
+                        batchesAsArrays = (_a.sent())
+                            .batch(this.batchSize, this.smallLastBatch);
+                        return [2, batchesAsArrays.map(makeDatasetBatch)];
+                }
+            });
+        });
+    };
+    return BatchDataset;
+}());
+exports.BatchDataset = BatchDataset;
+function makeDatasetBatch(elements) {
+    var rotated = {};
+    var firstElement = elements[0];
+    var keys = Object.keys(firstElement);
+    keys.forEach(function (key) {
+        rotated[key] = [];
+    });
+    var _loop_1 = function (e) {
+        keys.forEach(function (key) {
+            var value = e[key];
+            rotated[key].push(value);
+        });
+    };
+    for (var _i = 0, elements_1 = elements; _i < elements_1.length; _i++) {
+        var e = elements_1[_i];
+        _loop_1(e);
+    }
+    var result = {};
+    for (var _a = 0, keys_1 = keys; _a < keys_1.length; _a++) {
+        var key = keys_1[_a];
+        if (rotated[key].length !== elements.length) {
+            throw new Error("Batching failed to get a '" + key + "' value for each element.");
+        }
+        if (typeof rotated[key][0] === 'string') {
+            result[key] = rotated[key];
+        }
+        else {
+            result[key] = batchConcat(rotated[key]);
+        }
+    }
+    return result;
+}
+function batchConcat(arrays) {
+    var elementShape = shapeAndValues(arrays[0])[0];
+    var batchShape = [arrays.length].concat(elementShape);
+    var resultVals = new Float32Array(batchShape.reduce(function (x, y) { return x * y; }));
+    var offset = 0;
+    for (var _i = 0, arrays_1 = arrays; _i < arrays_1.length; _i++) {
+        var a = arrays_1[_i];
+        var _a = shapeAndValues(a), aShape = _a[0], aVals = _a[1];
+        if (!util.arraysEqual(aShape, elementShape)) {
+            throw new Error('Elements must have the same shape to be batched');
+        }
+        resultVals.set(aVals, offset);
+        offset += aVals.length;
+    }
+    var result = tensor_1.Tensor.make(batchShape, { values: resultVals });
+    return result;
+}
+function shapeAndValues(array) {
+    if (array instanceof tensor_1.Tensor) {
+        return [array.shape, array.dataSync()];
+    }
+    else if (Array.isArray(array)) {
+        return [[array.length], array];
+    }
+    else {
+        return [[], [array]];
+    }
+}
+
+},{"../../tensor":146,"../../util":151}],12:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var seedrandom = require("seedrandom");
+var batch_dataset_1 = require("./batch_dataset");
+var statistics_1 = require("./statistics");
+var data_stream_1 = require("./streams/data_stream");
+var data_stream_2 = require("./streams/data_stream");
+var data_stream_3 = require("./streams/data_stream");
+var Dataset = (function () {
+    function Dataset() {
+    }
+    Dataset.prototype.computeStatistics = function (sampleSize, shuffleWindowSize) {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                return [2, statistics_1.computeDatasetStatistics(this, sampleSize, shuffleWindowSize)];
+            });
+        });
+    };
+    Dataset.prototype.filter = function (filterer) {
+        var _this = this;
+        var base = this;
+        return datasetFromStreamFn(function () { return __awaiter(_this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, base.getStream()];
+                    case 1: return [2, (_a.sent()).filter(filterer)];
+                }
+            });
+        }); });
+    };
+    Dataset.prototype.map = function (transform) {
+        var _this = this;
+        var base = this;
+        return datasetFromStreamFn(function () { return __awaiter(_this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, base.getStream()];
+                    case 1: return [2, (_a.sent()).map(transform)];
+                }
+            });
+        }); });
+    };
+    Dataset.prototype.batch = function (batchSize, smallLastBatch) {
+        if (smallLastBatch === void 0) { smallLastBatch = true; }
+        return new batch_dataset_1.BatchDataset(this, batchSize, smallLastBatch);
+    };
+    Dataset.prototype.concatenate = function (dataset) {
+        var _this = this;
+        var base = this;
+        return datasetFromStreamFn(function () { return __awaiter(_this, void 0, void 0, function () {
+            var _a, _b;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0: return [4, base.getStream()];
+                    case 1:
+                        _b = (_a = (_c.sent())).concatenate;
+                        return [4, dataset.getStream()];
+                    case 2: return [2, _b.apply(_a, [_c.sent()])];
+                }
+            });
+        }); });
+    };
+    Dataset.prototype.repeat = function (count) {
+        var _this = this;
+        var base = this;
+        return datasetFromStreamFn(function () { return __awaiter(_this, void 0, void 0, function () {
+            var streamStream;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        streamStream = data_stream_2.streamFromFunction(function () { return base.getStream(); });
+                        return [4, data_stream_1.streamFromConcatenated(streamStream.take(count))];
+                    case 1: return [2, (_a.sent())];
+                }
+            });
+        }); });
+    };
+    Dataset.prototype.take = function (count) {
+        var _this = this;
+        var base = this;
+        return datasetFromStreamFn(function () { return __awaiter(_this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, base.getStream()];
+                    case 1: return [2, (_a.sent()).take(count)];
+                }
+            });
+        }); });
+    };
+    Dataset.prototype.skip = function (count) {
+        var _this = this;
+        var base = this;
+        return datasetFromStreamFn(function () { return __awaiter(_this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, base.getStream()];
+                    case 1: return [2, (_a.sent()).skip(count)];
+                }
+            });
+        }); });
+    };
+    Dataset.prototype.shuffle = function (bufferSize, seed, reshuffleEachIteration) {
+        var _this = this;
+        if (reshuffleEachIteration === void 0) { reshuffleEachIteration = true; }
+        var base = this;
+        var random = seedrandom(seed);
+        return datasetFromStreamFn(function () { return __awaiter(_this, void 0, void 0, function () {
+            var seed2;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        seed2 = random.int32();
+                        if (reshuffleEachIteration) {
+                            seed2 += random.int32();
+                        }
+                        return [4, base.getStream()];
+                    case 1: return [2, (_a.sent()).shuffle(bufferSize, seed2.toString())];
+                }
+            });
+        }); });
+    };
+    Dataset.prototype.prefetch = function (bufferSize) {
+        var _this = this;
+        var base = this;
+        return datasetFromStreamFn(function () { return __awaiter(_this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, base.getStream()];
+                    case 1: return [2, (_a.sent()).prefetch(bufferSize)];
+                }
+            });
+        }); });
+    };
+    return Dataset;
+}());
+exports.Dataset = Dataset;
+function datasetFromStreamFn(getStreamFn) {
+    return new (function (_super) {
+        __extends(class_1, _super);
+        function class_1() {
+            return _super !== null && _super.apply(this, arguments) || this;
+        }
+        class_1.prototype.getStream = function () {
+            return __awaiter(this, void 0, void 0, function () {
+                return __generator(this, function (_a) {
+                    return [2, getStreamFn()];
+                });
+            });
+        };
+        return class_1;
+    }(Dataset))();
+}
+exports.datasetFromStreamFn = datasetFromStreamFn;
+function datasetFromElements(items) {
+    var _this = this;
+    return datasetFromStreamFn(function () { return __awaiter(_this, void 0, void 0, function () {
+        return __generator(this, function (_a) {
+            return [2, Promise.resolve(data_stream_3.streamFromItems(items))];
+        });
+    }); });
+}
+exports.datasetFromElements = datasetFromElements;
+function datasetFromConcatenated(datasets) {
+    var _this = this;
+    return datasetFromStreamFn(function () { return __awaiter(_this, void 0, void 0, function () {
+        var streamStream;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4, Promise.all(datasets.map(function (d) { return d.getStream(); }))];
+                case 1:
+                    streamStream = _a.sent();
+                    return [2, data_stream_1.streamFromConcatenated(data_stream_3.streamFromItems(streamStream))];
+            }
+        });
+    }); });
+}
+exports.datasetFromConcatenated = datasetFromConcatenated;
+
+},{"./batch_dataset":11,"./statistics":18,"./streams/data_stream":20,"seedrandom":153}],13:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var dataset_1 = require("../dataset");
+var text_line_dataset_1 = require("./text_line_dataset");
+var CsvHeaderConfig;
+(function (CsvHeaderConfig) {
+    CsvHeaderConfig[CsvHeaderConfig["READ_FIRST_LINE"] = 0] = "READ_FIRST_LINE";
+    CsvHeaderConfig[CsvHeaderConfig["NUMBERED"] = 1] = "NUMBERED";
+})(CsvHeaderConfig = exports.CsvHeaderConfig || (exports.CsvHeaderConfig = {}));
+var CSVDataset = (function (_super) {
+    __extends(CSVDataset, _super);
+    function CSVDataset(input) {
+        var _this = _super.call(this) || this;
+        _this.input = input;
+        _this.hasHeaderLine = false;
+        _this.base = new text_line_dataset_1.TextLineDataset(input, CSVDataset.textColumnName);
+        return _this;
+    }
+    Object.defineProperty(CSVDataset.prototype, "csvColumnNames", {
+        get: function () {
+            return this._csvColumnNames;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    CSVDataset.prototype.setCsvColumnNames = function (csvColumnNames) {
+        return __awaiter(this, void 0, void 0, function () {
+            var stream, firstElement, firstLine, stream, firstElement, firstLine;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!(csvColumnNames == null || csvColumnNames === CsvHeaderConfig.NUMBERED)) return [3, 3];
+                        return [4, this.base.getStream()];
+                    case 1:
+                        stream = _a.sent();
+                        return [4, stream.next()];
+                    case 2:
+                        firstElement = _a.sent();
+                        firstLine = firstElement[CSVDataset.textColumnName];
+                        this._csvColumnNames =
+                            Array.from(firstLine.split(',').keys()).map(function (x) { return x.toString(); });
+                        return [3, 7];
+                    case 3:
+                        if (!(csvColumnNames === CsvHeaderConfig.READ_FIRST_LINE)) return [3, 6];
+                        return [4, this.base.getStream()];
+                    case 4:
+                        stream = _a.sent();
+                        return [4, stream.next()];
+                    case 5:
+                        firstElement = _a.sent();
+                        firstLine = firstElement[CSVDataset.textColumnName];
+                        this._csvColumnNames = firstLine.split(',');
+                        this.hasHeaderLine = true;
+                        return [3, 7];
+                    case 6:
+                        this._csvColumnNames = csvColumnNames;
+                        _a.label = 7;
+                    case 7: return [2];
+                }
+            });
+        });
+    };
+    CSVDataset.create = function (input, csvColumnNames) {
+        if (csvColumnNames === void 0) { csvColumnNames = CsvHeaderConfig.NUMBERED; }
+        return __awaiter(this, void 0, void 0, function () {
+            var result;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        result = new CSVDataset(input);
+                        return [4, result.setCsvColumnNames(csvColumnNames)];
+                    case 1:
+                        _a.sent();
+                        return [2, result];
+                }
+            });
+        });
+    };
+    CSVDataset.prototype.getStream = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var _this = this;
+            var lines;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, this.base.getStream()];
+                    case 1:
+                        lines = _a.sent();
+                        if (this.hasHeaderLine) {
+                            lines = lines.skip(1);
+                        }
+                        return [2, lines.map(function (x) { return _this.makeDatasetElement(x); })];
+                }
+            });
+        });
+    };
+    CSVDataset.prototype.makeDatasetElement = function (element) {
+        var line = element[CSVDataset.textColumnName];
+        var values = line.split(',');
+        var result = {};
+        for (var i = 0; i < this._csvColumnNames.length; i++) {
+            var value = values[i];
+            if (value === '') {
+                result[this._csvColumnNames[i]] = undefined;
+            }
+            else {
+                var valueAsNum = Number(value);
+                if (isNaN(valueAsNum)) {
+                    result[this._csvColumnNames[i]] = value;
+                }
+                else {
+                    result[this._csvColumnNames[i]] = valueAsNum;
+                }
+            }
+        }
+        return result;
+    };
+    CSVDataset.textColumnName = 'line';
+    return CSVDataset;
+}(dataset_1.Dataset));
+exports.CSVDataset = CSVDataset;
+
+},{"../dataset":12,"./text_line_dataset":14}],14:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var dataset_1 = require("../dataset");
+var TextLineDataset = (function (_super) {
+    __extends(TextLineDataset, _super);
+    function TextLineDataset(input, columnName) {
+        if (columnName === void 0) { columnName = 'line'; }
+        var _this = _super.call(this) || this;
+        _this.input = input;
+        _this.columnName = columnName;
+        return _this;
+    }
+    TextLineDataset.prototype.getStream = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var _this = this;
+            var readStream, utf8Stream, lineStream;
+            return __generator(this, function (_a) {
+                readStream = this.input.getStream();
+                utf8Stream = readStream.decodeUTF8();
+                lineStream = utf8Stream.split('\n');
+                return [2, lineStream.map(function (x) {
+                        return (_a = {}, _a[_this.columnName] = x, _a);
+                        var _a;
+                    })];
+            });
+        });
+    };
+    return TextLineDataset;
+}(dataset_1.Dataset));
+exports.TextLineDataset = TextLineDataset;
+
+},{"../dataset":12}],15:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var DataSource = (function () {
+    function DataSource() {
+    }
+    return DataSource;
+}());
+exports.DataSource = DataSource;
+
+},{}],16:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var datasource_1 = require("../datasource");
+var filereader_stream_1 = require("../streams/filereader_stream");
+var FileDataSource = (function (_super) {
+    __extends(FileDataSource, _super);
+    function FileDataSource(input, options) {
+        if (options === void 0) { options = {}; }
+        var _this = _super.call(this) || this;
+        _this.input = input;
+        _this.options = options;
+        return _this;
+    }
+    FileDataSource.prototype.getStream = function () {
+        return new filereader_stream_1.FileReaderStream(this.input, this.options);
+    };
+    return FileDataSource;
+}(datasource_1.DataSource));
+exports.FileDataSource = FileDataSource;
+
+},{"../datasource":15,"../streams/filereader_stream":21}],17:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var datasource_1 = require("../datasource");
+var url_stream_1 = require("../streams/url_stream");
+var URLDataSource = (function (_super) {
+    __extends(URLDataSource, _super);
+    function URLDataSource(url, options) {
+        if (options === void 0) { options = {}; }
+        var _this = _super.call(this) || this;
+        _this.url = url;
+        _this.options = options;
+        return _this;
+    }
+    URLDataSource.prototype.getStream = function () {
+        return new url_stream_1.URLStream(this.url, this.options);
+    };
+    return URLDataSource;
+}(datasource_1.DataSource));
+exports.URLDataSource = URLDataSource;
+
+},{"../datasource":15,"../streams/url_stream":23}],18:[function(require,module,exports){
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var tensor_1 = require("../../tensor");
+function scaleTo01(min, max) {
+    var range = max - min;
+    var minTensor = tensor_1.Scalar.new(min);
+    var rangeTensor = tensor_1.Scalar.new(range);
+    return function (value) {
+        if (typeof (value) === 'string') {
+            throw new Error('Can\'t scale a string.');
+        }
+        else {
+            if (value instanceof tensor_1.Tensor) {
+                var result = value.sub(minTensor).div(rangeTensor);
+                return result;
+            }
+            else if (value instanceof Array) {
+                return value.map(function (v) { return (v - min) / range; });
+            }
+            else {
+                return (value - min) / range;
+            }
+        }
+    };
+}
+exports.scaleTo01 = scaleTo01;
+function computeDatasetStatistics(dataset, sampleSize, shuffleWindowSize) {
+    return __awaiter(this, void 0, void 0, function () {
+        var stream, result;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4, dataset.getStream()];
+                case 1:
+                    stream = _a.sent();
+                    if (shuffleWindowSize != null) {
+                        stream = stream.shuffle(shuffleWindowSize);
+                    }
+                    if (sampleSize != null) {
+                        stream = stream.take(sampleSize);
+                    }
+                    result = {};
+                    return [4, stream.forEach(function (e) {
+                            for (var key in e) {
+                                var value = e[key];
+                                if (typeof (value) === 'string') {
+                                }
+                                else {
+                                    var recordMin = void 0;
+                                    var recordMax = void 0;
+                                    if (value instanceof tensor_1.Tensor) {
+                                        recordMin = value.min().dataSync()[0];
+                                        recordMax = value.max().dataSync()[0];
+                                    }
+                                    else if (value instanceof Array) {
+                                        recordMin = value.reduce(function (a, b) { return Math.min(a, b); });
+                                        recordMax = value.reduce(function (a, b) { return Math.max(a, b); });
+                                    }
+                                    else if (!isNaN(value) && isFinite(value)) {
+                                        recordMin = value;
+                                        recordMax = value;
+                                    }
+                                    else {
+                                        throw new Error("Cannot compute statistics: " + key + " = " + value);
+                                    }
+                                    var columnStats = result[key];
+                                    if (columnStats == null) {
+                                        columnStats = {
+                                            min: Number.POSITIVE_INFINITY,
+                                            max: Number.NEGATIVE_INFINITY
+                                        };
+                                        result[key] = columnStats;
+                                    }
+                                    columnStats.min = Math.min(columnStats.min, recordMin);
+                                    columnStats.max = Math.max(columnStats.max, recordMax);
+                                }
+                            }
+                            return {};
+                        })];
+                case 2:
+                    _a.sent();
+                    return [2, result];
+            }
+        });
+    });
+}
+exports.computeDatasetStatistics = computeDatasetStatistics;
+
+},{"../../tensor":146}],19:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var utf8 = require("utf8");
+var data_stream_1 = require("./data_stream");
+var string_stream_1 = require("./string_stream");
+var ByteStream = (function (_super) {
+    __extends(ByteStream, _super);
+    function ByteStream() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    ByteStream.prototype.decodeUTF8 = function () {
+        return new Utf8Stream(this);
+    };
+    return ByteStream;
+}(data_stream_1.DataStream));
+exports.ByteStream = ByteStream;
+var Utf8Stream = (function (_super) {
+    __extends(Utf8Stream, _super);
+    function Utf8Stream(upstream) {
+        var _this = _super.call(this) || this;
+        _this.impl = new Utf8StreamImpl(upstream);
+        return _this;
+    }
+    Utf8Stream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                return [2, this.impl.next()];
+            });
+        });
+    };
+    return Utf8Stream;
+}(string_stream_1.StringStream));
+var Utf8StreamImpl = (function (_super) {
+    __extends(Utf8StreamImpl, _super);
+    function Utf8StreamImpl(upstream) {
+        var _this = _super.call(this) || this;
+        _this.upstream = upstream;
+        _this.partial = new Uint8Array([]);
+        _this.partialBytesValid = 0;
+        return _this;
+    }
+    Utf8StreamImpl.prototype.pump = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var chunk, partialBytesRemaining, nextIndex, okUpToIndex, splitUtfWidth, bulk, reassembled;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, this.upstream.next()];
+                    case 1:
+                        chunk = _a.sent();
+                        if (chunk == null) {
+                            if (this.partial.length === 0) {
+                                return [2, false];
+                            }
+                            chunk = new Uint8Array([]);
+                        }
+                        partialBytesRemaining = this.partial.length - this.partialBytesValid;
+                        nextIndex = partialBytesRemaining;
+                        okUpToIndex = nextIndex;
+                        splitUtfWidth = 0;
+                        while (nextIndex < chunk.length) {
+                            okUpToIndex = nextIndex;
+                            splitUtfWidth = utfWidth(chunk[nextIndex]);
+                            nextIndex = okUpToIndex + splitUtfWidth;
+                        }
+                        if (nextIndex === chunk.length) {
+                            okUpToIndex = nextIndex;
+                        }
+                        bulk = utf8.decode(String.fromCharCode.apply(null, chunk.slice(partialBytesRemaining, okUpToIndex)));
+                        if (partialBytesRemaining > 0) {
+                            this.partial.set(chunk.slice(0, partialBytesRemaining), this.partialBytesValid);
+                            reassembled = utf8.decode(String.fromCharCode.apply(null, this.partial));
+                            this.outputQueue.push(reassembled + bulk);
+                        }
+                        else {
+                            this.outputQueue.push(bulk);
+                        }
+                        if (okUpToIndex === chunk.length) {
+                            this.partial = new Uint8Array([]);
+                            this.partialBytesValid = 0;
+                        }
+                        else {
+                            this.partial = new Uint8Array(new ArrayBuffer(splitUtfWidth));
+                            this.partial.set(chunk.slice(okUpToIndex), 0);
+                            this.partialBytesValid = chunk.length - okUpToIndex;
+                        }
+                        return [2, true];
+                }
+            });
+        });
+    };
+    return Utf8StreamImpl;
+}(data_stream_1.QueueStream));
+function utfWidth(firstByte) {
+    if (firstByte >= 252)
+        return 6;
+    else if (firstByte >= 248)
+        return 5;
+    else if (firstByte >= 240)
+        return 4;
+    else if (firstByte >= 224)
+        return 3;
+    else if (firstByte >= 192)
+        return 2;
+    else
+        return 1;
+}
+
+},{"./data_stream":20,"./string_stream":22,"utf8":161}],20:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var seedrandom = require("seedrandom");
+var growing_ring_buffer_1 = require("../util/growing_ring_buffer");
+var ring_buffer_1 = require("../util/ring_buffer");
+function streamFromItems(items) {
+    return new ArrayStream(items);
+}
+exports.streamFromItems = streamFromItems;
+function streamFromIncrementing(start) {
+    var i = start;
+    return streamFromFunction(function () { return i++; });
+}
+exports.streamFromIncrementing = streamFromIncrementing;
+function streamFromFunction(func) {
+    return new FunctionCallStream(func);
+}
+exports.streamFromFunction = streamFromFunction;
+function streamFromConcatenated(baseStreams) {
+    return __awaiter(this, void 0, void 0, function () {
+        return __generator(this, function (_a) {
+            return [2, ChainedStream.create(baseStreams)];
+        });
+    });
+}
+exports.streamFromConcatenated = streamFromConcatenated;
+function streamFromConcatenatedFunction(streamFunc, count) {
+    return __awaiter(this, void 0, void 0, function () {
+        return __generator(this, function (_a) {
+            return [2, streamFromConcatenated(streamFromFunction(streamFunc).take(count))];
+        });
+    });
+}
+exports.streamFromConcatenatedFunction = streamFromConcatenatedFunction;
+var DataStream = (function () {
+    function DataStream() {
+    }
+    DataStream.prototype.collectRemaining = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var result, x;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        result = [];
+                        return [4, this.next()];
+                    case 1:
+                        x = _a.sent();
+                        _a.label = 2;
+                    case 2:
+                        if (!(x != null)) return [3, 4];
+                        result.push(x);
+                        return [4, this.next()];
+                    case 3:
+                        x = _a.sent();
+                        return [3, 2];
+                    case 4: return [2, result];
+                }
+            });
+        });
+    };
+    DataStream.prototype.resolveFully = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var x;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, this.next()];
+                    case 1:
+                        x = _a.sent();
+                        _a.label = 2;
+                    case 2:
+                        if (!(x != null)) return [3, 4];
+                        return [4, this.next()];
+                    case 3:
+                        x = _a.sent();
+                        return [3, 2];
+                    case 4: return [2];
+                }
+            });
+        });
+    };
+    DataStream.prototype.filter = function (predicate) {
+        return new FilterStream(this, predicate);
+    };
+    DataStream.prototype.map = function (transform) {
+        return new MapStream(this, transform);
+    };
+    DataStream.prototype.forEach = function (f) {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                return [2, this.map(f).resolveFully()];
+            });
+        });
+    };
+    DataStream.prototype.batch = function (batchSize, smallLastBatch) {
+        if (smallLastBatch === void 0) { smallLastBatch = true; }
+        return new BatchStream(this, batchSize, smallLastBatch);
+    };
+    DataStream.prototype.concatenate = function (stream) {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                return [2, ChainedStream.create(new ArrayStream([this, stream]))];
+            });
+        });
+    };
+    DataStream.prototype.take = function (count) {
+        if (count < 0 || count == null)
+            return this;
+        return new TakeStream(this, count);
+    };
+    DataStream.prototype.skip = function (count) {
+        if (count < 0 || count == null)
+            return this;
+        return new SkipStream(this, count);
+    };
+    DataStream.prototype.prefetch = function (bufferSize) {
+        return new PrefetchStream(this, bufferSize);
+    };
+    DataStream.prototype.shuffle = function (windowSize, seed) {
+        return new ShuffleStream(this, windowSize, seed);
+    };
+    return DataStream;
+}());
+exports.DataStream = DataStream;
+var ArrayStream = (function (_super) {
+    __extends(ArrayStream, _super);
+    function ArrayStream(items) {
+        var _this = _super.call(this) || this;
+        _this.items = items;
+        _this.trav = 0;
+        return _this;
+    }
+    ArrayStream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var result;
+            return __generator(this, function (_a) {
+                if (this.trav >= this.items.length) {
+                    return [2, undefined];
+                }
+                result = this.items[this.trav];
+                this.trav++;
+                return [2, result];
+            });
+        });
+    };
+    return ArrayStream;
+}(DataStream));
+var FunctionCallStream = (function (_super) {
+    __extends(FunctionCallStream, _super);
+    function FunctionCallStream(nextFn) {
+        var _this = _super.call(this) || this;
+        _this.nextFn = nextFn;
+        return _this;
+    }
+    FunctionCallStream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                return [2, this.nextFn()];
+            });
+        });
+    };
+    return FunctionCallStream;
+}(DataStream));
+var SkipStream = (function (_super) {
+    __extends(SkipStream, _super);
+    function SkipStream(upstream, maxCount) {
+        var _this = _super.call(this) || this;
+        _this.upstream = upstream;
+        _this.maxCount = maxCount;
+        _this.count = 0;
+        return _this;
+    }
+    SkipStream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var skipped;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!(this.count++ < this.maxCount)) return [3, 2];
+                        return [4, this.upstream.next()];
+                    case 1:
+                        skipped = _a.sent();
+                        if (skipped == null) {
+                            return [2, undefined];
+                        }
+                        return [3, 0];
+                    case 2: return [2, this.upstream.next()];
+                }
+            });
+        });
+    };
+    return SkipStream;
+}(DataStream));
+var TakeStream = (function (_super) {
+    __extends(TakeStream, _super);
+    function TakeStream(upstream, maxCount) {
+        var _this = _super.call(this) || this;
+        _this.upstream = upstream;
+        _this.maxCount = maxCount;
+        _this.count = 0;
+        return _this;
+    }
+    TakeStream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                if (this.count++ >= this.maxCount) {
+                    return [2, undefined];
+                }
+                return [2, this.upstream.next()];
+            });
+        });
+    };
+    return TakeStream;
+}(DataStream));
+var QueueStream = (function (_super) {
+    __extends(QueueStream, _super);
+    function QueueStream() {
+        var _this = _super.call(this) || this;
+        _this.outputQueue = new growing_ring_buffer_1.GrowingRingBuffer();
+        return _this;
+    }
+    QueueStream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!(this.outputQueue.length() === 0)) return [3, 2];
+                        return [4, this.pump()];
+                    case 1:
+                        if (!(_a.sent())) {
+                            return [2, undefined];
+                        }
+                        return [3, 0];
+                    case 2: return [2, this.outputQueue.shift()];
+                }
+            });
+        });
+    };
+    return QueueStream;
+}(DataStream));
+exports.QueueStream = QueueStream;
+var BatchStream = (function (_super) {
+    __extends(BatchStream, _super);
+    function BatchStream(upstream, batchSize, enableSmallLastBatch) {
+        if (enableSmallLastBatch === void 0) { enableSmallLastBatch = true; }
+        var _this = _super.call(this) || this;
+        _this.upstream = upstream;
+        _this.batchSize = batchSize;
+        _this.enableSmallLastBatch = enableSmallLastBatch;
+        _this.currentBatch = [];
+        return _this;
+    }
+    BatchStream.prototype.pump = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var item;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, this.upstream.next()];
+                    case 1:
+                        item = _a.sent();
+                        if (item == null) {
+                            if (this.enableSmallLastBatch && this.currentBatch.length > 0) {
+                                this.outputQueue.push(this.currentBatch);
+                                this.currentBatch = [];
+                                return [2, true];
+                            }
+                            return [2, false];
+                        }
+                        this.currentBatch.push(item);
+                        if (this.currentBatch.length === this.batchSize) {
+                            this.outputQueue.push(this.currentBatch);
+                            this.currentBatch = [];
+                        }
+                        return [2, true];
+                }
+            });
+        });
+    };
+    return BatchStream;
+}(QueueStream));
+var FilterStream = (function (_super) {
+    __extends(FilterStream, _super);
+    function FilterStream(upstream, predicate) {
+        var _this = _super.call(this) || this;
+        _this.upstream = upstream;
+        _this.predicate = predicate;
+        return _this;
+    }
+    FilterStream.prototype.pump = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var item, accept;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, this.upstream.next()];
+                    case 1:
+                        item = _a.sent();
+                        if (item == null) {
+                            return [2, false];
+                        }
+                        accept = this.predicate(item);
+                        if (!(accept instanceof Promise)) return [3, 3];
+                        return [4, accept];
+                    case 2:
+                        accept = _a.sent();
+                        _a.label = 3;
+                    case 3:
+                        if (accept) {
+                            this.outputQueue.push(item);
+                        }
+                        return [2, true];
+                }
+            });
+        });
+    };
+    return FilterStream;
+}(QueueStream));
+var MapStream = (function (_super) {
+    __extends(MapStream, _super);
+    function MapStream(upstream, transform) {
+        var _this = _super.call(this) || this;
+        _this.upstream = upstream;
+        _this.transform = transform;
+        return _this;
+    }
+    MapStream.prototype.pump = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var item, mapped;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4, this.upstream.next()];
+                    case 1:
+                        item = _a.sent();
+                        if (item == null) {
+                            return [2, false];
+                        }
+                        mapped = this.transform(item);
+                        if (!(mapped instanceof Promise)) return [3, 3];
+                        return [4, mapped];
+                    case 2:
+                        mapped = _a.sent();
+                        _a.label = 3;
+                    case 3:
+                        this.outputQueue.push(mapped);
+                        return [2, true];
+                }
+            });
+        });
+    };
+    return MapStream;
+}(QueueStream));
+var ChainState = (function () {
+    function ChainState(item, currentStream, moreStreams) {
+        this.item = item;
+        this.currentStream = currentStream;
+        this.moreStreams = moreStreams;
+    }
+    return ChainState;
+}());
+function nextChainState(afterState) {
+    return __awaiter(this, void 0, void 0, function () {
+        var state, stream, item;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4, afterState];
+                case 1:
+                    state = _a.sent();
+                    stream = state.currentStream;
+                    if (stream == null) {
+                        return [2, new ChainState(undefined, undefined, state.moreStreams)];
+                    }
+                    return [4, stream.next()];
+                case 2:
+                    item = _a.sent();
+                    if (!(item == null)) return [3, 4];
+                    return [4, state.moreStreams.next()];
+                case 3:
+                    stream = _a.sent();
+                    return [2, nextChainState(Promise.resolve(new ChainState(undefined, stream, state.moreStreams)))];
+                case 4: return [2, new ChainState(item, stream, state.moreStreams)];
+            }
+        });
+    });
+}
+var ChainedStream = (function (_super) {
+    __extends(ChainedStream, _super);
+    function ChainedStream() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    ChainedStream.create = function (baseStreams) {
+        return __awaiter(this, void 0, void 0, function () {
+            var c, currentStream;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        c = new ChainedStream();
+                        return [4, baseStreams.next()];
+                    case 1:
+                        currentStream = _a.sent();
+                        c.currentPromise =
+                            Promise.resolve(new ChainState(undefined, currentStream, baseStreams));
+                        return [2, c];
+                }
+            });
+        });
+    };
+    ChainedStream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        this.currentPromise = nextChainState(this.currentPromise);
+                        return [4, this.currentPromise];
+                    case 1: return [2, (_a.sent()).item];
+                }
+            });
+        });
+    };
+    return ChainedStream;
+}(DataStream));
+exports.ChainedStream = ChainedStream;
+var PrefetchStream = (function (_super) {
+    __extends(PrefetchStream, _super);
+    function PrefetchStream(upstream, bufferSize) {
+        var _this = _super.call(this) || this;
+        _this.upstream = upstream;
+        _this.bufferSize = bufferSize;
+        _this.total = 0;
+        _this.buffer = new ring_buffer_1.RingBuffer(bufferSize);
+        return _this;
+    }
+    PrefetchStream.prototype.refill = function () {
+        while (!this.buffer.isFull()) {
+            var v = this.upstream.next();
+            if (v == null) {
+                return;
+            }
+            this.buffer.push(v);
+        }
+    };
+    PrefetchStream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var result;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        this.refill();
+                        if (this.buffer.isEmpty())
+                            return [2, undefined];
+                        return [4, this.buffer.shift()];
+                    case 1:
+                        result = _a.sent();
+                        this.refill();
+                        return [2, result];
+                }
+            });
+        });
+    };
+    return PrefetchStream;
+}(DataStream));
+exports.PrefetchStream = PrefetchStream;
+var ShuffleStream = (function (_super) {
+    __extends(ShuffleStream, _super);
+    function ShuffleStream(upstream, windowSize, seed) {
+        var _this = _super.call(this, upstream, windowSize) || this;
+        _this.upstream = upstream;
+        _this.windowSize = windowSize;
+        _this.upstreamExhausted = false;
+        _this.random = seedrandom(seed);
+        return _this;
+    }
+    ShuffleStream.prototype.randomInt = function (max) {
+        return Math.floor(this.random() * max);
+    };
+    ShuffleStream.prototype.chooseIndex = function () {
+        return this.randomInt(this.buffer.length());
+    };
+    ShuffleStream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var chosenIndex, result;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!this.upstreamExhausted) {
+                            this.refill();
+                        }
+                        _a.label = 1;
+                    case 1:
+                        if (!!this.buffer.isEmpty()) return [3, 3];
+                        chosenIndex = this.chooseIndex();
+                        return [4, this.buffer.shuffleExcise(chosenIndex)];
+                    case 2:
+                        result = _a.sent();
+                        if (result == null) {
+                            this.upstreamExhausted = true;
+                        }
+                        else {
+                            this.refill();
+                            return [2, result];
+                        }
+                        return [3, 1];
+                    case 3: return [2, undefined];
+                }
+            });
+        });
+    };
+    return ShuffleStream;
+}(PrefetchStream));
+exports.ShuffleStream = ShuffleStream;
+
+},{"../util/growing_ring_buffer":24,"../util/ring_buffer":25,"seedrandom":153}],21:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var byte_stream_1 = require("./byte_stream");
+var FileReaderStream = (function (_super) {
+    __extends(FileReaderStream, _super);
+    function FileReaderStream(file, options) {
+        if (options === void 0) { options = {}; }
+        var _this = _super.call(this) || this;
+        _this.file = file;
+        _this.options = options;
+        _this.offset = options.offset || 0;
+        _this.chunkSize = options.chunkSize || 1024 * 1024;
+        return _this;
+    }
+    FileReaderStream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var _this = this;
+            var chunk;
+            return __generator(this, function (_a) {
+                if (this.offset >= this.file.size) {
+                    return [2, undefined];
+                }
+                chunk = new Promise(function (resolve, reject) {
+                    var fileReader = new FileReader();
+                    fileReader.onload = function (event) {
+                        var data = fileReader.result;
+                        if (data instanceof ArrayBuffer) {
+                            data = new Uint8Array(data);
+                        }
+                        if (!(data instanceof Uint8Array)) {
+                            return reject(new TypeError('FileReader returned unknown type.'));
+                        }
+                        resolve(data);
+                    };
+                    fileReader.onabort = function (event) {
+                        return reject(new Error('Aborted'));
+                    };
+                    fileReader.onerror = function (event) {
+                        return reject(new Error(event.error));
+                    };
+                    var end = _this.offset + _this.chunkSize;
+                    var slice = _this.file.slice(_this.offset, end);
+                    fileReader.readAsArrayBuffer(slice);
+                    _this.offset = end;
+                });
+                return [2, chunk];
+            });
+        });
+    };
+    return FileReaderStream;
+}(byte_stream_1.ByteStream));
+exports.FileReaderStream = FileReaderStream;
+
+},{"./byte_stream":19}],22:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var data_stream_1 = require("./data_stream");
+var StringStream = (function (_super) {
+    __extends(StringStream, _super);
+    function StringStream() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    StringStream.prototype.split = function (separator) {
+        return new SplitStream(this, separator);
+    };
+    return StringStream;
+}(data_stream_1.DataStream));
+exports.StringStream = StringStream;
+var SplitStream = (function (_super) {
+    __extends(SplitStream, _super);
+    function SplitStream(upstream, separator) {
+        var _this = _super.call(this) || this;
+        _this.impl = new SplitStreamImpl(upstream, separator);
+        return _this;
+    }
+    SplitStream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                return [2, this.impl.next()];
+            });
+        });
+    };
+    return SplitStream;
+}(StringStream));
+var SplitStreamImpl = (function (_super) {
+    __extends(SplitStreamImpl, _super);
+    function SplitStreamImpl(upstream, separator) {
+        var _this = _super.call(this) || this;
+        _this.upstream = upstream;
+        _this.separator = separator;
+        _this.carryover = '';
+        return _this;
+    }
+    SplitStreamImpl.prototype.pump = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var chunk, lines, _i, _a, line;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0: return [4, this.upstream.next()];
+                    case 1:
+                        chunk = _b.sent();
+                        if (chunk == null) {
+                            if (this.carryover === '') {
+                                return [2, false];
+                            }
+                            this.outputQueue.push(this.carryover);
+                            this.carryover = '';
+                            return [2, true];
+                        }
+                        lines = chunk.split(this.separator);
+                        lines[0] = this.carryover + lines[0];
+                        for (_i = 0, _a = lines.slice(0, -1); _i < _a.length; _i++) {
+                            line = _a[_i];
+                            this.outputQueue.push(line);
+                        }
+                        this.carryover = lines[lines.length - 1];
+                        return [2, true];
+                }
+            });
+        });
+    };
+    return SplitStreamImpl;
+}(data_stream_1.QueueStream));
+
+},{"./data_stream":20}],23:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var byte_stream_1 = require("./byte_stream");
+var data_stream_1 = require("./data_stream");
+var filereader_stream_1 = require("./filereader_stream");
+var URLStream = (function (_super) {
+    __extends(URLStream, _super);
+    function URLStream(url, options) {
+        if (options === void 0) { options = {}; }
+        var _this = _super.call(this) || this;
+        _this.impl = new URLStreamImpl(url, options);
+        return _this;
+    }
+    URLStream.prototype.next = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                return [2, this.impl.next()];
+            });
+        });
+    };
+    return URLStream;
+}(byte_stream_1.ByteStream));
+exports.URLStream = URLStream;
+var URLStreamImpl = (function (_super) {
+    __extends(URLStreamImpl, _super);
+    function URLStreamImpl(url, options) {
+        if (options === void 0) { options = {}; }
+        var _this = _super.call(this) || this;
+        _this.url = url;
+        _this.options = options;
+        _this.blobPromise = fetch(url, options).then(function (response) {
+            if (response.ok) {
+                return response.blob();
+            }
+            else {
+                throw new Error(response.statusText);
+            }
+        });
+        return _this;
+    }
+    URLStreamImpl.prototype.pump = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var blob, chunk;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!(this.fileReaderStream == null)) return [3, 2];
+                        return [4, this.blobPromise];
+                    case 1:
+                        blob = _a.sent();
+                        this.fileReaderStream = new filereader_stream_1.FileReaderStream(blob, this.options);
+                        _a.label = 2;
+                    case 2: return [4, this.fileReaderStream.next()];
+                    case 3:
+                        chunk = _a.sent();
+                        if (chunk == null)
+                            return [2, false];
+                        this.outputQueue.push(chunk);
+                        return [2, true];
+                }
+            });
+        });
+    };
+    return URLStreamImpl;
+}(data_stream_1.QueueStream));
+
+},{"./byte_stream":19,"./data_stream":20,"./filereader_stream":21}],24:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var ring_buffer_1 = require("./ring_buffer");
+var GrowingRingBuffer = (function (_super) {
+    __extends(GrowingRingBuffer, _super);
+    function GrowingRingBuffer() {
+        return _super.call(this, GrowingRingBuffer.INITIAL_CAPACITY) || this;
+    }
+    GrowingRingBuffer.prototype.isFull = function () {
+        return false;
+    };
+    GrowingRingBuffer.prototype.push = function (value) {
+        if (_super.prototype.isFull.call(this)) {
+            this.expand();
+        }
+        _super.prototype.push.call(this, value);
+    };
+    GrowingRingBuffer.prototype.unshift = function (value) {
+        if (_super.prototype.isFull.call(this)) {
+            this.expand();
+        }
+        _super.prototype.unshift.call(this, value);
+    };
+    GrowingRingBuffer.prototype.expand = function () {
+        var newCapacity = this.capacity * 2;
+        var newData = new Array(newCapacity);
+        var len = this.length();
+        for (var i = 0; i < len; i++) {
+            newData[i] = this.get(this.wrap(this.begin + i));
+        }
+        this.data = newData;
+        this.capacity = newCapacity;
+        this.doubledCapacity = 2 * this.capacity;
+        this.begin = 0;
+        this.end = len;
+    };
+    GrowingRingBuffer.INITIAL_CAPACITY = 32;
+    return GrowingRingBuffer;
+}(ring_buffer_1.RingBuffer));
+exports.GrowingRingBuffer = GrowingRingBuffer;
+
+},{"./ring_buffer":25}],25:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var RingBuffer = (function () {
+    function RingBuffer(capacity) {
+        this.capacity = capacity;
+        this.begin = 0;
+        this.end = 0;
+        if (capacity < 1) {
+            throw new RangeError('Can\'t create ring buffer of capacity < 1.');
+        }
+        this.data = new Array(capacity);
+        this.doubledCapacity = 2 * capacity;
+    }
+    RingBuffer.prototype.wrap = function (index) {
+        while (index < 0) {
+            index += this.doubledCapacity;
+        }
+        return index % this.doubledCapacity;
+    };
+    RingBuffer.prototype.get = function (index) {
+        if (index < 0) {
+            throw new RangeError('Can\'t get item at a negative index.');
+        }
+        return this.data[index % this.capacity];
+    };
+    RingBuffer.prototype.set = function (index, value) {
+        if (index < 0) {
+            throw new RangeError('Can\'t set item at a negative index.');
+        }
+        this.data[index % this.capacity] = value;
+    };
+    RingBuffer.prototype.length = function () {
+        var length = this.end - this.begin;
+        if (length < 0) {
+            length = this.doubledCapacity + length;
+        }
+        return length;
+    };
+    RingBuffer.prototype.isFull = function () {
+        return this.length() === this.capacity;
+    };
+    RingBuffer.prototype.isEmpty = function () {
+        return this.length() === 0;
+    };
+    RingBuffer.prototype.push = function (value) {
+        if (this.isFull()) {
+            throw new RangeError('Ring buffer is full.');
+        }
+        this.set(this.end, value);
+        this.end = this.wrap(this.end + 1);
+    };
+    RingBuffer.prototype.pop = function () {
+        if (this.isEmpty()) {
+            throw new RangeError('Ring buffer is empty.');
+        }
+        this.end = this.wrap(this.end - 1);
+        var result = this.get(this.end);
+        this.set(this.end, undefined);
+        return result;
+    };
+    RingBuffer.prototype.unshift = function (value) {
+        if (this.isFull()) {
+            throw new RangeError('Ring buffer is full.');
+        }
+        this.begin = this.wrap(this.begin - 1);
+        this.set(this.begin, value);
+    };
+    RingBuffer.prototype.shift = function () {
+        if (this.isEmpty()) {
+            throw new RangeError('Ring buffer is empty.');
+        }
+        var result = this.get(this.begin);
+        this.set(this.begin, undefined);
+        this.begin = this.wrap(this.begin + 1);
+        return result;
+    };
+    RingBuffer.prototype.shuffleExcise = function (relativeIndex) {
+        if (this.isEmpty()) {
+            throw new RangeError('Ring buffer is empty.');
+        }
+        var index = this.wrap(this.begin + relativeIndex);
+        var result = this.get(index);
+        this.set(index, this.pop());
+        return result;
+    };
+    return RingBuffer;
+}());
+exports.RingBuffer = RingBuffer;
+
+},{}],26:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var dataset_1 = require("./data/dataset");
+exports.Dataset = dataset_1.Dataset;
+var csv_dataset_1 = require("./data/datasets/csv_dataset");
+exports.CSVDataset = csv_dataset_1.CSVDataset;
+var text_line_dataset_1 = require("./data/datasets/text_line_dataset");
+exports.TextLineDataset = text_line_dataset_1.TextLineDataset;
+var file_data_source_1 = require("./data/sources/file_data_source");
+exports.FileDataSource = file_data_source_1.FileDataSource;
+var url_data_source_1 = require("./data/sources/url_data_source");
+exports.URLDataSource = url_data_source_1.URLDataSource;
+
+},{"./data/dataset":12,"./data/datasets/csv_dataset":13,"./data/datasets/text_line_dataset":14,"./data/sources/file_data_source":16,"./data/sources/url_data_source":17}],27:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var tensor_1 = require("../tensor");
 var MANIFEST_FILE = 'manifest.json';
 var CheckpointLoader = (function () {
     function CheckpointLoader(urlPath) {
@@ -1719,8 +3727,8 @@ var CheckpointLoader = (function () {
                     throw new Error("Not found variable " + varName);
                 }
                 var values = new Float32Array(xhr.response);
-                var ndarray = ndarray_1.NDArray.make(_this.checkpointManifest[varName].shape, { values: values });
-                resolve(ndarray);
+                var tensor = tensor_1.Tensor.make(_this.checkpointManifest[varName].shape, { values: values });
+                resolve(tensor);
             };
             xhr.onerror = function (error) {
                 throw new Error("Could not fetch variable " + varName + ": " + error);
@@ -1740,10 +3748,10 @@ var CheckpointLoader = (function () {
 }());
 exports.CheckpointLoader = CheckpointLoader;
 
-},{"../math/ndarray":94}],11:[function(require,module,exports){
+},{"../tensor":146}],28:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../math/ndarray");
+var tensor_1 = require("../tensor");
 var util = require("../util");
 var STATS_SAMPLE_PERCENTAGE = 0.1;
 var InMemoryDataset = (function () {
@@ -1818,7 +3826,7 @@ var InMemoryDataset = (function () {
                         newRange * (inputValues[j] - curLowerBound) / curRange;
                 }
             }
-            newExamples.push(ndarray_1.NDArray.make(example.shape, { values: normalizedValues }, 'float32'));
+            newExamples.push(tensor_1.Tensor.make(example.shape, { values: normalizedValues }, 'float32'));
         });
         return newExamples;
     };
@@ -1905,7 +3913,7 @@ var InMemoryDataset = (function () {
 }());
 exports.InMemoryDataset = InMemoryDataset;
 
-},{"../math/ndarray":94,"../util":100}],12:[function(require,module,exports){
+},{"../tensor":146,"../util":151}],29:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -1918,7 +3926,6 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../math/ndarray");
 var util = require("../util");
 var InMemoryShuffledInputProviderBuilder = (function () {
     function InMemoryShuffledInputProviderBuilder(inputs) {
@@ -1977,10 +3984,10 @@ var InCPUMemoryShuffledInputProviderBuilder = (function (_super) {
     InCPUMemoryShuffledInputProviderBuilder.prototype.getInputProvider = function (inputId) {
         var shuffledInputProvider = this;
         return {
-            getNextCopy: function (math) {
-                return ndarray_1.NDArray.like(shuffledInputProvider.getNextInput(inputId));
+            getNextCopy: function () {
+                return shuffledInputProvider.getNextInput(inputId).clone();
             },
-            disposeCopy: function (math, copy) {
+            disposeCopy: function (copy) {
                 copy.dispose();
             }
         };
@@ -1996,10 +4003,10 @@ var InGPUMemoryShuffledInputProviderBuilder = (function (_super) {
     InGPUMemoryShuffledInputProviderBuilder.prototype.getInputProvider = function (inputId) {
         var shuffledInputProvider = this;
         return {
-            getNextCopy: function (math) {
-                return math.clone(shuffledInputProvider.getNextInput(inputId));
+            getNextCopy: function () {
+                return shuffledInputProvider.getNextInput(inputId).clone();
             },
-            disposeCopy: function (math, copy) {
+            disposeCopy: function (copy) {
                 copy.dispose();
             }
         };
@@ -2008,7 +4015,7 @@ var InGPUMemoryShuffledInputProviderBuilder = (function (_super) {
 }(InMemoryShuffledInputProviderBuilder));
 exports.InGPUMemoryShuffledInputProviderBuilder = InGPUMemoryShuffledInputProviderBuilder;
 
-},{"../math/ndarray":94,"../util":100}],13:[function(require,module,exports){
+},{"../util":151}],30:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -2021,7 +4028,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../math/ndarray");
+var tensor_1 = require("../tensor");
 var util = require("../util");
 var dataset_1 = require("./dataset");
 var PARSING_IMAGE_CANVAS_HEIGHT_PX = 1000;
@@ -2046,25 +4053,25 @@ var XhrDataset = (function (_super) {
         _this.xhrDatasetConfig = xhrDatasetConfig;
         return _this;
     }
-    XhrDataset.prototype.getNDArray = function (info) {
+    XhrDataset.prototype.getTensor = function (info) {
         var dataPromise = info.dataType === 'png' ?
             parseTypedArrayFromPng(info, info.shape) :
             parseTypedArrayFromBinary(info);
         var inputSize = util.sizeFromShape(info.shape);
         return dataPromise.then(function (data) {
-            var ndarrays = [];
+            var tensors = [];
             for (var i = 0; i < data.length / inputSize; i++) {
                 var values = data.subarray(i * inputSize, (i + 1) * inputSize);
-                var ndarray = ndarray_1.NDArray.make(info.shape, { values: new Float32Array(values) }, 'float32');
-                ndarrays.push(ndarray);
+                var tensor = tensor_1.Tensor.make(info.shape, { values: new Float32Array(values) }, 'float32');
+                tensors.push(tensor);
             }
-            return ndarrays;
+            return tensors;
         });
     };
     XhrDataset.prototype.fetchData = function () {
         var _this = this;
         return new Promise(function (resolve, reject) {
-            var promises = _this.xhrDatasetConfig.data.map(function (x) { return _this.getNDArray(x); });
+            var promises = _this.xhrDatasetConfig.data.map(function (x) { return _this.getTensor(x); });
             Promise.all(promises).then(function (data) {
                 _this.dataset = data;
                 resolve();
@@ -2112,7 +4119,7 @@ function parseImage(img, shape) {
     var result = new Uint8Array(N * inputSize);
     if (img.width !== shape[0] * shape[1]) {
         throw new Error("Image width (" + img.width + ") must be multiple of " +
-            ("rows*columns (" + shape[0] + "*" + shape[1] + ") of the ndarray"));
+            ("rows*columns (" + shape[0] + "*" + shape[1] + ") of the tensor"));
     }
     canvas.width = img.width;
     canvas.height = PARSING_IMAGE_CANVAS_HEIGHT_PX;
@@ -2155,7 +4162,7 @@ function parseTypedArrayFromPng(info, shape) {
     });
 }
 
-},{"../math/ndarray":94,"../util":100,"./dataset":11}],14:[function(require,module,exports){
+},{"../tensor":146,"../util":151,"./dataset":28}],31:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 function isMobile() {
@@ -2167,27 +4174,372 @@ function isMobile() {
 }
 exports.isMobile = isMobile;
 
-},{}],15:[function(require,module,exports){
-(function (global){
+},{}],32:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+function doc(info) {
+    return function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+    };
+}
+exports.doc = doc;
+
+},{}],33:[function(require,module,exports){
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var environment_1 = require("./environment");
+var globals_1 = require("./globals");
+var kernel_registry = require("./kernels/kernel_registry");
+var ops = require("./ops/ops");
+var profiler_1 = require("./profiler");
+var tape_util = require("./tape_util");
+var tensor_1 = require("./tensor");
+var util = require("./util");
+var Engine = (function () {
+    function Engine(backend, customBackend, safeMode) {
+        this.backend = backend;
+        this.customBackend = customBackend;
+        this.safeMode = safeMode;
+        this.registeredVariables = {};
+        this.refCounter = new WeakMap();
+        this.nextTapeNodeId = 0;
+        this.numBytes = 0;
+        this.numTensors = 0;
+        this.numDataBuffers = 0;
+        this.gradientScopeCount = 0;
+        this.customGradientDepth = 0;
+        this.activeScope = { keep: [], track: [] };
+        this.scopeStack = [this.activeScope];
+        this.profiler = new profiler_1.Profiler(backend);
+    }
+    Engine.prototype.executeKernel = function (kernelName, config, grad) {
+        var _this = this;
+        var result;
+        if (!environment_1.ENV.get('DEBUG')) {
+            result = kernel_registry.executeKernel(this.backend, kernelName, config);
+        }
+        else {
+            result = this.profiler.profileKernel(kernelName, function () {
+                return kernel_registry.executeKernel(_this.backend, kernelName, config);
+            });
+        }
+        var recordKernel = this.activeTape != null && this.customGradientDepth === 0;
+        if (recordKernel) {
+            config = tape_util.stripUndefinedInputsFromInputConfig(config);
+            var evaluatedNode = {
+                id: this.nextTapeNodeId++,
+                type: 'kernel',
+                name: "kernel: " + kernelName,
+                kernel: kernelName,
+                inputAndArgs: config,
+                output: result,
+                gradient: grad
+            };
+            this.activeTape.push(evaluatedNode);
+        }
+        return result;
+    };
+    Engine.prototype.registerTensor = function (a) {
+        var refCount = this.refCounter.has(a.dataId) ? this.refCounter.get(a.dataId) : 0;
+        this.numTensors++;
+        if (refCount === 0) {
+            this.numDataBuffers++;
+            this.numBytes +=
+                util.sizeFromShape(a.shape) * util.bytesPerElement(a.dtype);
+            this.backend.register(a.dataId, a.shape, a.dtype);
+        }
+        this.refCounter.set(a.dataId, refCount + 1);
+        if (!(a instanceof tensor_1.Variable)) {
+            this.track(a);
+        }
+    };
+    Engine.prototype.registerVariable = function (v) {
+        if (this.registeredVariables[v.name] != null) {
+            throw new Error("Variable with name " + v.name + " was already registered");
+        }
+        this.registeredVariables[v.name] = v;
+    };
+    Engine.prototype.disposeTensor = function (a) {
+        if (!this.refCounter.has(a.dataId)) {
+            return;
+        }
+        this.numTensors--;
+        var refCount = this.refCounter.get(a.dataId);
+        if (refCount <= 1) {
+            this.refCounter.delete(a.dataId);
+            this.backend.disposeData(a.dataId);
+            this.numDataBuffers--;
+            this.numBytes -=
+                util.sizeFromShape(a.shape) * util.bytesPerElement(a.dtype);
+        }
+        else {
+            this.refCounter.set(a.dataId, refCount - 1);
+        }
+    };
+    Engine.prototype.memory = function () {
+        var info = this.backend.memory();
+        info.numTensors = this.numTensors;
+        info.numDataBuffers = this.numDataBuffers;
+        info.numBytes = this.numBytes;
+        return info;
+    };
+    Engine.prototype.shouldRecord = function () {
+        return this.activeTape != null && this.customGradientDepth === 0;
+    };
+    Engine.prototype.addTapeNode = function (inputs, result, gradientsFunc) {
+        var inputsMap = {};
+        inputs.forEach(function (input, idx) {
+            inputsMap[idx] = input;
+        });
+        var gradient = function (dy) {
+            var res = gradientsFunc(dy);
+            var resMap = {};
+            res.forEach(function (r, idx) {
+                resMap[idx] = function () { return r; };
+            });
+            return resMap;
+        };
+        var evaluatedNode = {
+            id: this.nextTapeNodeId++,
+            type: 'customGradient',
+            name: name,
+            inputAndArgs: { inputs: inputsMap },
+            output: result,
+            gradient: gradient
+        };
+        this.activeTape.push(evaluatedNode);
+    };
+    Engine.prototype.keep = function (result) {
+        if (this.scopeStack.length === 1 && environment_1.ENV.engine.safeMode) {
+            throw new Error('Safe mode is ON. Enclose all tensor operations inside dl.tidy(): ' +
+                'dl.tidy(() => {...}) to avoid memory leaks.');
+        }
+        this.activeScope.keep.push(result);
+        return result;
+    };
+    Engine.prototype.startScope = function (gradientsMode) {
+        if (gradientsMode === void 0) { gradientsMode = false; }
+        if (gradientsMode && this.gradientScopeCount === 0) {
+            this.activeTape = [];
+        }
+        if (gradientsMode) {
+            this.gradientScopeCount++;
+        }
+        var newScopeArrays = { keep: [], track: [] };
+        this.scopeStack.push(newScopeArrays);
+        this.activeScope = newScopeArrays;
+    };
+    Engine.prototype.endScope = function (result, gradientsMode) {
+        var _this = this;
+        if (gradientsMode === void 0) { gradientsMode = false; }
+        if (gradientsMode) {
+            this.gradientScopeCount--;
+            if (this.gradientScopeCount === 0) {
+                this.activeTape = null;
+            }
+        }
+        var tensorsToKeep = this.activeScope.keep;
+        var tensorsToTrackInParent = tape_util.extractTensorsFromScopeResult(result);
+        tensorsToKeep = tensorsToKeep.concat(tensorsToTrackInParent);
+        for (var i = 0; i < this.activeScope.track.length; i++) {
+            var tensor = this.activeScope.track[i];
+            if (util.isTensorInList(tensor, tensorsToKeep)) {
+                continue;
+            }
+            if (this.activeTape != null) {
+                tensorsToTrackInParent.push(tensor);
+            }
+            else {
+                tensor.dispose();
+            }
+        }
+        this.scopeStack.pop();
+        this.activeScope = this.scopeStack.length === 0 ?
+            { keep: [], track: [] } :
+            this.scopeStack[this.scopeStack.length - 1];
+        tensorsToTrackInParent.forEach(function (tensor) {
+            if (!util.isTensorInList(tensor, _this.activeScope.keep)) {
+                _this.track(tensor);
+            }
+        });
+    };
+    Engine.prototype.dispose = function () {
+        if (this.customBackend) {
+            this.backend.dispose();
+        }
+    };
+    Engine.prototype.gradients = function (f, xs, dy, allowNoGradients) {
+        var _this = this;
+        if (allowNoGradients === void 0) { allowNoGradients = false; }
+        return globals_1.tidy('gradients', function () {
+            var y = f();
+            util.assert(y instanceof tensor_1.Tensor, 'The result y returned by f() must be a tensor.');
+            var filteredTape = tape_util.getFilteredNodesXToY(_this.activeTape, xs, y);
+            if (!allowNoGradients && filteredTape.length === 0 && xs.length > 0) {
+                throw new Error('Cannot compute gradient of y=f(x) with respect to x. Make sure ' +
+                    'that the f you passed encloses all operations that lead from x ' +
+                    'to y.');
+            }
+            var accumulatedGradientMap = {};
+            accumulatedGradientMap[y.id] = (dy == null) ? ops.onesLike(y) : dy;
+            tape_util.backpropagateGradients(accumulatedGradientMap, filteredTape);
+            var grads = xs.map(function (x) { return accumulatedGradientMap[x.id]; });
+            return { value: y, grads: grads };
+        }, true);
+    };
+    Engine.prototype.customGrad = function (f) {
+        var _this = this;
+        util.assert(util.isFunction(f), 'The f passed in customGrad(f) must be a function.');
+        return function () {
+            var inputs = [];
+            for (var _i = 0; _i < arguments.length; _i++) {
+                inputs[_i] = arguments[_i];
+            }
+            util.assert(inputs.every(function (t) { return t instanceof tensor_1.Tensor; }), 'The args passed in customGrad(f)(x1, x2,...) must all be tensors');
+            _this.customGradientDepth++;
+            var gradientsFunc;
+            var gradientsMode = true;
+            var result = globals_1.tidy(f.name, function () {
+                var _a = f.apply(void 0, inputs), value = _a.value, gradFunc = _a.gradFunc;
+                util.assert(value instanceof tensor_1.Tensor, 'The function f passed in customGrad(f) must return an object ' +
+                    'where `obj.value` is a tensor');
+                util.assert(util.isFunction(gradFunc), 'The function f passed in customGrad(f) must return an object ' +
+                    'where `obj.gradFunc` is a function.');
+                gradientsFunc = gradFunc;
+                return value;
+            }, gradientsMode);
+            _this.customGradientDepth--;
+            if (_this.shouldRecord()) {
+                var gradFunc = function (dy) {
+                    var res = gradientsFunc(dy);
+                    var grads = Array.isArray(res) ? res : [res];
+                    util.assert(grads.length === inputs.length, 'The function f passed in customGrad(f) must return an object ' +
+                        'where `obj.gradFunc` is a function that returns the same ' +
+                        'number of tensors as inputs passed to f(...).');
+                    util.assert(grads.every(function (t) { return t instanceof tensor_1.Tensor; }), 'The function f passed in customGrad(f) must return an object ' +
+                        'where `obj.gradFunc` is a function that returns a list of ' +
+                        'only tensors.');
+                    return grads;
+                };
+                _this.addTapeNode(inputs, result, gradFunc);
+            }
+            return result;
+        };
+    };
+    Engine.prototype.write = function (dataId, values) {
+        this.backend.write(dataId, values);
+    };
+    Engine.prototype.readSync = function (dataId) {
+        return this.backend.readSync(dataId);
+    };
+    Engine.prototype.read = function (dataId) {
+        return this.backend.read(dataId);
+    };
+    Engine.prototype.fromPixels = function (pixels, numChannels) {
+        return this.backend.fromPixels(pixels, numChannels);
+    };
+    Engine.prototype.time = function (query) {
+        return __awaiter(this, void 0, void 0, function () {
+            var start, timingInfo;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        start = performance.now();
+                        return [4, this.backend.time(query)];
+                    case 1:
+                        timingInfo = _a.sent();
+                        timingInfo.wallMs = performance.now() - start;
+                        return [2, timingInfo];
+                }
+            });
+        });
+    };
+    Engine.prototype.track = function (result) {
+        if (this.scopeStack.length === 1 && this.safeMode) {
+            throw new Error('Safe mode is ON. Enclose all tensor operations inside dl.tidy(): ' +
+                'dl.tidy(() => {op();...}); to avoid memory leaks.');
+        }
+        this.activeScope.track.push(result);
+        return result;
+    };
+    return Engine;
+}());
+exports.Engine = Engine;
+
+},{"./environment":34,"./globals":35,"./kernels/kernel_registry":70,"./ops/ops":123,"./profiler":144,"./tape_util":145,"./tensor":146,"./util":151}],34:[function(require,module,exports){
+(function (global){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
 var device_util = require("./device_util");
-var math_1 = require("./math/math");
+var doc_1 = require("./doc");
+var engine_1 = require("./engine");
+var math_1 = require("./math");
 var util = require("./util");
 var Type;
 (function (Type) {
     Type[Type["NUMBER"] = 0] = "NUMBER";
     Type[Type["BOOLEAN"] = 1] = "BOOLEAN";
+    Type[Type["STRING"] = 2] = "STRING";
 })(Type = exports.Type || (exports.Type = {}));
 exports.URL_PROPERTIES = [
-    { name: 'WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_ENABLED', type: Type.BOOLEAN },
+    { name: 'DEBUG', type: Type.BOOLEAN },
+    { name: 'WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_VERSION', type: Type.NUMBER },
     { name: 'WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_RELIABLE', type: Type.BOOLEAN },
     { name: 'WEBGL_VERSION', type: Type.NUMBER },
     { name: 'WEBGL_FLOAT_TEXTURE_ENABLED', type: Type.BOOLEAN }, {
         name: 'WEBGL_GET_BUFFER_SUB_DATA_ASYNC_EXTENSION_ENABLED',
         type: Type.BOOLEAN
-    }
+    },
+    { name: 'BACKEND', type: Type.STRING }
 ];
+function hasExtension(gl, extensionName) {
+    var ext = gl.getExtension(extensionName);
+    return ext != null;
+}
 function getWebGLRenderingContext(webGLVersion) {
     if (webGLVersion === 0) {
         throw new Error('Cannot get WebGL rendering context, WebGL is disabled.');
@@ -2216,16 +4568,26 @@ function isWebGLVersionEnabled(webGLVersion) {
     }
     return false;
 }
-function isWebGLDisjointQueryTimerEnabled(webGLVersion) {
+function getWebGLDisjointQueryTimerVersion(webGLVersion) {
+    if (webGLVersion === 0) {
+        return 0;
+    }
+    var queryTimerVersion;
     var gl = getWebGLRenderingContext(webGLVersion);
-    var extensionName = webGLVersion === 1 ? 'EXT_disjoint_timer_query' :
-        'EXT_disjoint_timer_query_webgl2';
-    var ext = gl.getExtension(extensionName);
-    var isExtEnabled = ext != null;
+    if (hasExtension(gl, 'EXT_disjoint_timer_query_webgl2') &&
+        webGLVersion === 2) {
+        queryTimerVersion = 2;
+    }
+    else if (hasExtension(gl, 'EXT_disjoint_timer_query')) {
+        queryTimerVersion = 1;
+    }
+    else {
+        queryTimerVersion = 0;
+    }
     if (gl != null) {
         loseContext(gl);
     }
-    return isExtEnabled;
+    return queryTimerVersion;
 }
 function isFloatTextureReadPixelsEnabled(webGLVersion) {
     if (webGLVersion === 0) {
@@ -2233,12 +4595,12 @@ function isFloatTextureReadPixelsEnabled(webGLVersion) {
     }
     var gl = getWebGLRenderingContext(webGLVersion);
     if (webGLVersion === 1) {
-        if (gl.getExtension('OES_texture_float') == null) {
+        if (!hasExtension(gl, 'OES_texture_float')) {
             return false;
         }
     }
     else {
-        if (gl.getExtension('EXT_color_buffer_float') == null) {
+        if (!hasExtension(gl, 'EXT_color_buffer_float')) {
             return false;
         }
     }
@@ -2260,21 +4622,39 @@ function isWebGLGetBufferSubDataAsyncExtensionEnabled(webGLVersion) {
         return false;
     }
     var gl = getWebGLRenderingContext(webGLVersion);
-    var ext = gl.getExtension('WEBGL_get_buffer_sub_data_async');
-    var isEnabled = ext != null;
+    var isEnabled = hasExtension(gl, 'WEBGL_get_buffer_sub_data_async');
     loseContext(gl);
     return isEnabled;
 }
+var SUPPORTED_BACKENDS = ['webgl', 'cpu'];
 var Environment = (function () {
     function Environment(features) {
         this.features = {};
-        this.globalMath = null;
-        this.backendRegistry = {};
-        this.prevBackendRegistry = this.backendRegistry;
+        this.BACKEND_REGISTRY = {};
+        this.backends = this.BACKEND_REGISTRY;
         if (features != null) {
             this.features = features;
         }
+        if (this.get('DEBUG')) {
+            console.warn('Debugging mode is ON. The output of every math call will ' +
+                'be downloaded to CPU and checked for NaNs. ' +
+                'This significantly impacts performance.');
+        }
     }
+    Environment.setBackend = function (backendType, safeMode) {
+        if (safeMode === void 0) { safeMode = false; }
+        if (!(backendType in exports.ENV.backends)) {
+            throw new Error("Backend type '" + backendType + "' not found in registry");
+        }
+        exports.ENV.globalMath = new math_1.NDArrayMath(backendType, safeMode);
+    };
+    Environment.getBackend = function () {
+        exports.ENV.initEngine();
+        return exports.ENV.currentBackendType;
+    };
+    Environment.memory = function () {
+        return exports.ENV.engine.memory();
+    };
     Environment.prototype.get = function (feature) {
         if (feature in this.features) {
             return this.features[feature];
@@ -2282,26 +4662,34 @@ var Environment = (function () {
         this.features[feature] = this.evaluateFeature(feature);
         return this.features[feature];
     };
-    Environment.prototype.getBestBackend = function () {
-        var orderedBackends = ['webgl', 'cpu'];
-        for (var i = 0; i < orderedBackends.length; ++i) {
-            var backendId = orderedBackends[i];
-            if (backendId in this.backendRegistry) {
-                return this.backendRegistry[backendId];
+    Environment.prototype.set = function (feature, value) {
+        this.features[feature] = value;
+    };
+    Environment.prototype.getBestBackendType = function () {
+        for (var i = 0; i < SUPPORTED_BACKENDS.length; ++i) {
+            var backendId = SUPPORTED_BACKENDS[i];
+            if (backendId in this.backends) {
+                return backendId;
             }
         }
         throw new Error('No backend found in registry.');
     };
     Environment.prototype.evaluateFeature = function (feature) {
-        if (feature === 'WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_ENABLED') {
+        if (feature === 'DEBUG') {
+            return false;
+        }
+        else if (feature === 'BACKEND') {
+            return this.getBestBackendType();
+        }
+        else if (feature === 'WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_VERSION') {
             var webGLVersion = this.get('WEBGL_VERSION');
             if (webGLVersion === 0) {
-                return false;
+                return 0;
             }
-            return isWebGLDisjointQueryTimerEnabled(webGLVersion);
+            return getWebGLDisjointQueryTimerVersion(webGLVersion);
         }
         else if (feature === 'WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_RELIABLE') {
-            return this.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_ENABLED') &&
+            return this.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_VERSION') > 0 &&
                 !device_util.isMobile();
         }
         else if (feature === 'WEBGL_VERSION') {
@@ -2322,27 +4710,64 @@ var Environment = (function () {
         throw new Error("Unknown feature " + feature + ".");
     };
     Environment.prototype.setFeatures = function (features) {
-        this.empty();
+        this.reset();
         this.features = features;
+        this.backends = {};
     };
     Environment.prototype.reset = function () {
-        this.globalMath = null;
-        this.backendRegistry = this.prevBackendRegistry;
         this.features = getFeaturesFromURL();
+        if (this.globalMath != null) {
+            this.globalMath.dispose();
+            this.globalMath = null;
+            this.globalEngine = null;
+        }
+        if (this.backends !== this.BACKEND_REGISTRY) {
+            for (var name_1 in this.backends) {
+                this.backends[name_1].dispose();
+            }
+            this.backends = this.BACKEND_REGISTRY;
+        }
     };
-    Environment.prototype.setMath = function (math) {
+    Environment.prototype.setMath = function (math, backend, safeMode) {
+        if (safeMode === void 0) { safeMode = false; }
+        if (this.globalMath === math) {
+            return;
+        }
+        var customBackend = false;
+        if (typeof backend === 'string') {
+            this.currentBackendType = backend;
+            backend = exports.ENV.findBackend(backend);
+        }
+        else {
+            customBackend = true;
+            this.currentBackendType = 'custom';
+        }
+        this.globalEngine = new engine_1.Engine(backend, customBackend, safeMode);
         this.globalMath = math;
     };
-    Environment.prototype.getBackend = function (name) {
-        return this.backendRegistry[name];
+    Environment.prototype.findBackend = function (name) {
+        return this.backends[name];
     };
-    Environment.prototype.registerBackend = function (name, factory) {
-        if (name in this.backendRegistry) {
+    Environment.prototype.addCustomBackend = function (name, factory) {
+        if (name in this.backends) {
             throw new Error(name + " backend was already registered");
         }
         try {
             var backend = factory();
-            this.backendRegistry[name] = backend;
+            this.backends[name] = backend;
+            return true;
+        }
+        catch (err) {
+            return false;
+        }
+    };
+    Environment.prototype.registerBackend = function (name, factory) {
+        if (name in this.BACKEND_REGISTRY) {
+            throw new Error(name + " backend was already registered as global");
+        }
+        try {
+            var backend = factory();
+            this.BACKEND_REGISTRY[name] = backend;
             return true;
         }
         catch (err) {
@@ -2351,22 +4776,36 @@ var Environment = (function () {
     };
     Object.defineProperty(Environment.prototype, "math", {
         get: function () {
-            if (this.globalMath == null) {
-                var bestBackend = this.getBestBackend();
-                var safeMode = false;
-                this.globalMath = new math_1.NDArrayMath(bestBackend, safeMode);
+            if (this.globalEngine == null) {
+                this.initEngine();
             }
             return this.globalMath;
         },
         enumerable: true,
         configurable: true
     });
-    Environment.prototype.empty = function () {
-        this.globalMath = null;
-        this.prevBackendRegistry = this.backendRegistry;
-        this.backendRegistry = {};
-        this.features = null;
+    Object.defineProperty(Environment.prototype, "engine", {
+        get: function () {
+            if (this.globalEngine == null) {
+                this.initEngine();
+            }
+            return this.globalEngine;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Environment.prototype.initEngine = function () {
+        this.globalMath = new math_1.NDArrayMath(exports.ENV.get('BACKEND'), false);
     };
+    __decorate([
+        doc_1.doc({ heading: 'Environment' })
+    ], Environment, "setBackend", null);
+    __decorate([
+        doc_1.doc({ heading: 'Environment' })
+    ], Environment, "getBackend", null);
+    __decorate([
+        doc_1.doc({ heading: 'Performance', subheading: 'Memory' })
+    ], Environment, "memory", null);
     return Environment;
 }());
 exports.Environment = Environment;
@@ -2393,6 +4832,9 @@ function getFeaturesFromURL() {
                 }
                 else if (urlProperty.type === Type.BOOLEAN) {
                     features[urlProperty.name] = urlFlags_1[urlProperty.name] === 'true';
+                }
+                else if (urlProperty.type === Type.STRING) {
+                    features[urlProperty.name] = urlFlags_1[urlProperty.name];
                 }
                 else {
                     console.warn("Unknown URL param: " + urlProperty.name + ".");
@@ -2423,7 +4865,279 @@ function getOrMakeEnvironment() {
 exports.ENV = getOrMakeEnvironment();
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./device_util":14,"./math/math":93,"./util":100}],16:[function(require,module,exports){
+},{"./device_util":31,"./doc":32,"./engine":33,"./math":105,"./util":151}],35:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var gradients_1 = require("./gradients");
+var tracking_1 = require("./tracking");
+exports.tidy = tracking_1.Tracking.tidy;
+exports.keep = tracking_1.Tracking.keep;
+exports.time = tracking_1.Tracking.time;
+exports.grad = gradients_1.Gradients.grad;
+exports.valueAndGrad = gradients_1.Gradients.valueAndGrad;
+exports.grads = gradients_1.Gradients.grads;
+exports.valueAndGrads = gradients_1.Gradients.valueAndGrads;
+exports.variableGrads = gradients_1.Gradients.variableGrads;
+exports.customGrad = gradients_1.Gradients.customGrad;
+
+},{"./gradients":36,"./tracking":148}],36:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("./doc");
+var environment_1 = require("./environment");
+var globals_1 = require("./globals");
+var tensor_1 = require("./tensor");
+var util = require("./util");
+var Gradients = (function () {
+    function Gradients() {
+    }
+    Gradients.gradScope = function (nameOrScopeFn, scopeFn) {
+        return globals_1.tidy(nameOrScopeFn, scopeFn, true);
+    };
+    Gradients.grad = function (f) {
+        util.assert(util.isFunction(f), 'The f passed in grad(f) must be a function');
+        return function (x, dy) {
+            util.assert(x instanceof tensor_1.Tensor, 'The x passed in grad(f)(x) must be a tensor');
+            util.assert(dy == null || dy instanceof tensor_1.Tensor, 'The dy passed in grad(f)(x, dy) must be a tensor');
+            var _a = environment_1.ENV.engine.gradients(function () { return f(x); }, [x], dy), value = _a.value, grads = _a.grads;
+            if (dy != null) {
+                util.assertShapesMatch(value.shape, dy.shape, 'The shape of dy passed in grad(f)(x, dy) must match the shape ' +
+                    'returned by f(x)');
+            }
+            value.dispose();
+            checkGrads(grads);
+            return grads[0];
+        };
+    };
+    Gradients.grads = function (f) {
+        util.assert(util.isFunction(f), 'The f passed in grads(f) must be a function');
+        return function (args, dy) {
+            util.assert(Array.isArray(args) && args.every(function (arg) { return arg instanceof tensor_1.Tensor; }), 'The args passed in grads(f)(args) must be an array of tensors');
+            util.assert(dy == null || dy instanceof tensor_1.Tensor, 'The dy passed in grads(f)(args, dy) must be a tensor');
+            var _a = environment_1.ENV.engine.gradients(function () { return f.apply(void 0, args); }, args, dy), value = _a.value, grads = _a.grads;
+            if (dy != null) {
+                util.assertShapesMatch(value.shape, dy.shape, 'The shape of dy passed in grads(f)([x1,...], dy) must match the ' +
+                    'shape returned by f([x1,...])');
+            }
+            value.dispose();
+            checkGrads(grads);
+            return grads;
+        };
+    };
+    Gradients.valueAndGrad = function (f) {
+        util.assert(util.isFunction(f), 'The f passed in valueAndGrad(f) must be a function');
+        return function (x, dy) {
+            util.assert(x instanceof tensor_1.Tensor, 'The x passed in valueAndGrad(f)(x) must be a tensor');
+            util.assert(dy == null || dy instanceof tensor_1.Tensor, 'The dy passed in valueAndGrad(f)(x, dy) must be a tensor');
+            var _a = environment_1.ENV.engine.gradients(function () { return f(x); }, [x], dy), grads = _a.grads, value = _a.value;
+            checkGrads(grads);
+            return { grad: grads[0], value: value };
+        };
+    };
+    Gradients.valueAndGrads = function (f) {
+        util.assert(util.isFunction(f), 'The f passed in valueAndGrads(f) must be a function');
+        return function (args, dy) {
+            util.assert(Array.isArray(args) && args.every(function (arg) { return arg instanceof tensor_1.Tensor; }), 'The args passed in valueAndGrads(f)(args) must be array of tensors');
+            util.assert(dy == null || dy instanceof tensor_1.Tensor, 'The dy passed in valueAndGrads(f)(args, dy) must be a tensor');
+            var res = environment_1.ENV.engine.gradients(function () { return f.apply(void 0, args); }, args, dy);
+            if (dy != null) {
+                util.assertShapesMatch(res.value.shape, dy.shape, 'The shape of dy passed in valueAndGrads(f)([x1,...], dy) must ' +
+                    'match the shape returned by f([x1,...])');
+            }
+            checkGrads(res.grads);
+            return res;
+        };
+    };
+    Gradients.variableGrads = function (f, varList) {
+        util.assert(util.isFunction(f), 'The f passed in variableGrads(f) must be a function');
+        util.assert(varList == null ||
+            Array.isArray(varList) && varList.every(function (v) { return v instanceof tensor_1.Variable; }), 'The varList passed in variableGrads(f, varList) must be an array ' +
+            'of variables');
+        if (varList == null) {
+            varList = [];
+            for (var varName in environment_1.ENV.engine.registeredVariables) {
+                varList.push(environment_1.ENV.engine.registeredVariables[varName]);
+            }
+        }
+        varList = varList.filter(function (variable) { return variable.trainable; });
+        var allowNoGradients = true;
+        var _a = environment_1.ENV.engine.gradients(f, varList, null, allowNoGradients), value = _a.value, grads = _a.grads;
+        util.assert(grads.some(function (g) { return g != null; }), 'Cannot find a connection between any variable and the result of the ' +
+            'loss function y=f(x). Please make sure the operations that use ' +
+            'variables are inside the function f passed to minimize().');
+        util.assert(value.rank === 0, "The f passed in variableGrads(f) must return a scalar, but it " +
+            ("returned a rank-" + value.rank + " tensor"));
+        var namedGrads = {};
+        varList.forEach(function (v, i) {
+            if (grads[i] != null) {
+                namedGrads[v.name] = grads[i];
+            }
+        });
+        return { value: value, grads: namedGrads };
+    };
+    Gradients.customGrad = function (f) {
+        return environment_1.ENV.engine.customGrad(f);
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Gradients' })
+    ], Gradients, "grad", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Gradients' })
+    ], Gradients, "grads", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Gradients' })
+    ], Gradients, "valueAndGrad", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Gradients' })
+    ], Gradients, "valueAndGrads", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Gradients' })
+    ], Gradients, "variableGrads", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Gradients' })
+    ], Gradients, "customGrad", null);
+    return Gradients;
+}());
+exports.Gradients = Gradients;
+function checkGrads(grads) {
+    var numNullGradients = grads.filter(function (g) { return g == null; }).length;
+    if (numNullGradients > 0) {
+        throw new Error("Cannot compute gradient of y=f(x) with respect to x. Make sure that\n    the f you passed encloses all operations that lead from x to y.");
+    }
+}
+
+},{"./doc":32,"./environment":34,"./globals":35,"./tensor":146,"./util":151}],37:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../globals");
+var tensor_1 = require("../tensor");
+var TanHFunc = (function () {
+    function TanHFunc() {
+        this.one = tensor_1.Scalar.new(1);
+    }
+    TanHFunc.prototype.output = function (math, x) {
+        return math.tanh(x);
+    };
+    TanHFunc.prototype.der = function (math, x, y) {
+        var _this = this;
+        return globals_1.tidy(function () {
+            var ySquared = math.multiplyStrict(y, y);
+            return math.subtract(_this.one, ySquared);
+        });
+    };
+    TanHFunc.prototype.dispose = function () {
+        this.one.dispose();
+    };
+    return TanHFunc;
+}());
+exports.TanHFunc = TanHFunc;
+var ReLUFunc = (function () {
+    function ReLUFunc() {
+    }
+    ReLUFunc.prototype.output = function (math, x) {
+        return math.relu(x);
+    };
+    ReLUFunc.prototype.der = function (math, x, y) {
+        return math.step(x);
+    };
+    ReLUFunc.prototype.dispose = function () { };
+    return ReLUFunc;
+}());
+exports.ReLUFunc = ReLUFunc;
+var LeakyReluFunc = (function () {
+    function LeakyReluFunc(alpha) {
+        this.alpha = alpha;
+    }
+    LeakyReluFunc.prototype.output = function (math, x) {
+        return math.leakyRelu(x, this.alpha);
+    };
+    LeakyReluFunc.prototype.der = function (math, x, y) {
+        return math.step(x, this.alpha);
+    };
+    LeakyReluFunc.prototype.dispose = function () { };
+    return LeakyReluFunc;
+}());
+exports.LeakyReluFunc = LeakyReluFunc;
+var SigmoidFunc = (function () {
+    function SigmoidFunc() {
+    }
+    SigmoidFunc.prototype.output = function (math, x) {
+        return math.sigmoid(x);
+    };
+    SigmoidFunc.prototype.der = function (math, x, y) {
+        return globals_1.tidy(function () {
+            var ySquared = math.multiplyStrict(y, y);
+            return math.subStrict(y, ySquared);
+        });
+    };
+    SigmoidFunc.prototype.dispose = function () { };
+    return SigmoidFunc;
+}());
+exports.SigmoidFunc = SigmoidFunc;
+var SquareFunc = (function () {
+    function SquareFunc() {
+        this.two = tensor_1.Scalar.new(2);
+    }
+    SquareFunc.prototype.output = function (math, x) {
+        return math.multiplyStrict(x, x);
+    };
+    SquareFunc.prototype.der = function (math, x, y) {
+        return math.multiply(this.two, x);
+    };
+    SquareFunc.prototype.dispose = function () {
+        this.two.dispose();
+    };
+    return SquareFunc;
+}());
+exports.SquareFunc = SquareFunc;
+var EluFunc = (function () {
+    function EluFunc() {
+    }
+    EluFunc.prototype.output = function (math, x) {
+        return math.elu(x);
+    };
+    EluFunc.prototype.der = function (math, x, y) {
+        throw new Error('Not implemented');
+    };
+    EluFunc.prototype.dispose = function () { };
+    return EluFunc;
+}());
+exports.EluFunc = EluFunc;
+
+},{"../globals":35,"../tensor":146}],38:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../globals");
+var ops = require("../ops/ops");
+var SquareCostFunc = (function () {
+    function SquareCostFunc() {
+        this.halfOne = globals_1.keep(ops.scalar(0.5));
+    }
+    SquareCostFunc.prototype.cost = function (x1, x2) {
+        var diff = x1.subStrict(x2);
+        var diffSquared = diff.square();
+        var result = this.halfOne.mul(diffSquared);
+        diff.dispose();
+        diffSquared.dispose();
+        return result;
+    };
+    SquareCostFunc.prototype.der = function (x1, x2) {
+        return x1.subStrict(x2);
+    };
+    SquareCostFunc.prototype.dispose = function () {
+        this.halfOne.dispose();
+    };
+    return SquareCostFunc;
+}());
+exports.SquareCostFunc = SquareCostFunc;
+
+},{"../globals":35,"../ops/ops":123}],39:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -2436,11 +5150,11 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-var initializers_1 = require("../initializers");
-var concat_util = require("../math/concat_util");
-var conv_util = require("../math/conv_util");
-var ndarray_1 = require("../math/ndarray");
+var concat_util = require("../ops/concat_util");
+var conv_util = require("../ops/conv_util");
+var tensor_1 = require("../tensor");
 var util = require("../util");
+var initializers_1 = require("./initializers");
 var GraphLayers = (function () {
     function GraphLayers(g) {
         this.g = g;
@@ -2478,15 +5192,15 @@ var Graph = (function () {
     Graph.prototype.constant = function (value) {
         var finalValue;
         if (typeof value === 'number') {
-            finalValue = ndarray_1.Scalar.new(value);
+            finalValue = tensor_1.Scalar.new(value);
         }
-        else if (value instanceof ndarray_1.NDArray) {
+        else if (value instanceof tensor_1.Tensor) {
             finalValue = value;
         }
         else if (value instanceof Array) {
             var flatValues = util.flatten(value);
             var vals = new Float32Array(flatValues);
-            finalValue = ndarray_1.NDArray.make(util.inferShape(value), { values: vals });
+            finalValue = tensor_1.Tensor.make(util.inferShape(value), { values: vals });
         }
         else {
             throw new Error('unimplemented constant type.');
@@ -2514,8 +5228,17 @@ var Graph = (function () {
     Graph.prototype.reduceSum = function (x) {
         return this.addNodeAndReturnOutput(new ReduceSumNode(this, x));
     };
+    Graph.prototype.concat1d = function (x1, x2) {
+        return this.addNodeAndReturnOutput(new Concat1DNode(this, x1, x2));
+    };
+    Graph.prototype.concat2d = function (x1, x2, axis) {
+        return this.addNodeAndReturnOutput(new Concat2DNode(this, x1, x2, axis));
+    };
     Graph.prototype.concat3d = function (x1, x2, axis) {
         return this.addNodeAndReturnOutput(new Concat3DNode(this, x1, x2, axis));
+    };
+    Graph.prototype.concat4d = function (x1, x2, axis) {
+        return this.addNodeAndReturnOutput(new Concat4DNode(this, x1, x2, axis));
     };
     Graph.prototype.matmul = function (x1, x2) {
         return this.addNodeAndReturnOutput(new MatMulNode(this, x1, x2));
@@ -2581,15 +5304,18 @@ var Graph = (function () {
     return Graph;
 }());
 exports.Graph = Graph;
-var Tensor = (function () {
-    function Tensor(shape) {
-        this.shape = shape;
-        this.id = Tensor.nextID++;
+var SymbolicTensor = (function (_super) {
+    __extends(SymbolicTensor, _super);
+    function SymbolicTensor(shape) {
+        var _this = _super.call(this, [], 'float32') || this;
+        _this.shape = shape;
+        _this.id = SymbolicTensor.nextID++;
+        return _this;
     }
-    Tensor.nextID = 0;
-    return Tensor;
-}());
-exports.Tensor = Tensor;
+    SymbolicTensor.nextID = 0;
+    return SymbolicTensor;
+}(tensor_1.Tensor));
+exports.SymbolicTensor = SymbolicTensor;
 var Node = (function () {
     function Node(graph, name, inputs, output) {
         this.graph = graph;
@@ -2606,7 +5332,7 @@ exports.Node = Node;
 var VariableNode = (function (_super) {
     __extends(VariableNode, _super);
     function VariableNode(graph, name, data) {
-        var _this = _super.call(this, graph, name, {}, new Tensor(data.shape)) || this;
+        var _this = _super.call(this, graph, name, {}, new SymbolicTensor(data.shape)) || this;
         _this.data = data;
         return _this;
     }
@@ -2620,7 +5346,7 @@ exports.VariableNode = VariableNode;
 var PlaceholderNode = (function (_super) {
     __extends(PlaceholderNode, _super);
     function PlaceholderNode(graph, name, shape) {
-        return _super.call(this, graph, name, {}, new Tensor(shape)) || this;
+        return _super.call(this, graph, name, {}, new SymbolicTensor(shape)) || this;
     }
     PlaceholderNode.prototype.validate = function () { };
     return PlaceholderNode;
@@ -2629,7 +5355,7 @@ exports.PlaceholderNode = PlaceholderNode;
 var ConstantNode = (function (_super) {
     __extends(ConstantNode, _super);
     function ConstantNode(graph, data) {
-        var _this = _super.call(this, graph, 'Constant', {}, new Tensor(data.shape)) || this;
+        var _this = _super.call(this, graph, 'Constant', {}, new SymbolicTensor(data.shape)) || this;
         _this.data = data;
         return _this;
     }
@@ -2643,7 +5369,7 @@ exports.ConstantNode = ConstantNode;
 var ReshapeNode = (function (_super) {
     __extends(ReshapeNode, _super);
     function ReshapeNode(graph, name, x, shape) {
-        var _this = _super.call(this, graph, name, { x: x }, new Tensor(shape)) || this;
+        var _this = _super.call(this, graph, name, { x: x }, new SymbolicTensor(shape)) || this;
         _this.name = name;
         _this.x = x;
         _this.shape = shape;
@@ -2663,7 +5389,7 @@ exports.ReshapeNode = ReshapeNode;
 var FusedLinearCombinationNode = (function (_super) {
     __extends(FusedLinearCombinationNode, _super);
     function FusedLinearCombinationNode(graph, t1, t2, c1, c2) {
-        var _this = _super.call(this, graph, 'Linear Combination', { t1: t1, t2: t2, c1: c1, c2: c2 }, new Tensor(t1.shape)) || this;
+        var _this = _super.call(this, graph, 'Linear Combination', { t1: t1, t2: t2, c1: c1, c2: c2 }, new SymbolicTensor(t1.shape)) || this;
         _this.t1 = t1;
         _this.t2 = t2;
         _this.c1 = c1;
@@ -2691,9 +5417,9 @@ exports.FusedLinearCombinationNode = FusedLinearCombinationNode;
 var AddNode = (function (_super) {
     __extends(AddNode, _super);
     function AddNode(graph, t1, t2) {
-        var _this = _super.call(this, graph, 'Add', { t1: t1, t2: t2 }, new Tensor(util.sizeFromShape(t1.shape) === 1
-            ? t2.shape
-            : (t1.shape.length < t2.shape.length ? t2.shape : t1.shape))) || this;
+        var _this = _super.call(this, graph, 'Add', { t1: t1, t2: t2 }, new SymbolicTensor(util.sizeFromShape(t1.shape) === 1 ?
+            t2.shape :
+            (t1.shape.length < t2.shape.length ? t2.shape : t1.shape))) || this;
         _this.t1 = t1;
         _this.t2 = t2;
         return _this;
@@ -2717,7 +5443,7 @@ exports.AddNode = AddNode;
 var SubtractNode = (function (_super) {
     __extends(SubtractNode, _super);
     function SubtractNode(graph, t1, t2) {
-        var _this = _super.call(this, graph, 'Subtract', { t1: t1, t2: t2 }, new Tensor(util.sizeFromShape(t1.shape) === 1 ? t2.shape : t1.shape)) || this;
+        var _this = _super.call(this, graph, 'Subtract', { t1: t1, t2: t2 }, new SymbolicTensor(util.sizeFromShape(t1.shape) === 1 ? t2.shape : t1.shape)) || this;
         _this.t1 = t1;
         _this.t2 = t2;
         return _this;
@@ -2736,7 +5462,7 @@ exports.SubtractNode = SubtractNode;
 var MultiplyNode = (function (_super) {
     __extends(MultiplyNode, _super);
     function MultiplyNode(graph, t1, t2) {
-        var _this = _super.call(this, graph, 'Multiply', { t1: t1, t2: t2 }, new Tensor(util.sizeFromShape(t1.shape) === 1 ? t2.shape : t1.shape)) || this;
+        var _this = _super.call(this, graph, 'Multiply', { t1: t1, t2: t2 }, new SymbolicTensor(util.sizeFromShape(t1.shape) === 1 ? t2.shape : t1.shape)) || this;
         _this.t1 = t1;
         _this.t2 = t2;
         return _this;
@@ -2755,7 +5481,7 @@ exports.MultiplyNode = MultiplyNode;
 var DivideNode = (function (_super) {
     __extends(DivideNode, _super);
     function DivideNode(graph, t1, t2) {
-        var _this = _super.call(this, graph, 'Divide', { t1: t1, t2: t2 }, new Tensor(util.sizeFromShape(t1.shape) === 1 ? t2.shape : t1.shape)) || this;
+        var _this = _super.call(this, graph, 'Divide', { t1: t1, t2: t2 }, new SymbolicTensor(util.sizeFromShape(t1.shape) === 1 ? t2.shape : t1.shape)) || this;
         _this.t1 = t1;
         _this.t2 = t2;
         return _this;
@@ -2774,17 +5500,46 @@ exports.DivideNode = DivideNode;
 var ReduceSumNode = (function (_super) {
     __extends(ReduceSumNode, _super);
     function ReduceSumNode(graph, x) {
-        return _super.call(this, graph, 'ReduceSum', { x: x }, new Tensor([])) || this;
+        return _super.call(this, graph, 'ReduceSum', { x: x }, new SymbolicTensor([])) || this;
     }
     ReduceSumNode.prototype.validate = function () { };
     ReduceSumNode.X = 'x';
     return ReduceSumNode;
 }(Node));
 exports.ReduceSumNode = ReduceSumNode;
+var Concat1DNode = (function (_super) {
+    __extends(Concat1DNode, _super);
+    function Concat1DNode(graph, x1, x2) {
+        return _super.call(this, graph, 'Concat1D', { x1: x1, x2: x2 }, new SymbolicTensor(concat_util.computeOutShape1D(x1.shape, x2.shape))) || this;
+    }
+    Concat1DNode.prototype.validate = function () { };
+    Concat1DNode.X1 = 'x1';
+    Concat1DNode.X2 = 'x2';
+    return Concat1DNode;
+}(Node));
+exports.Concat1DNode = Concat1DNode;
+var Concat2DNode = (function (_super) {
+    __extends(Concat2DNode, _super);
+    function Concat2DNode(graph, x1, x2, axis) {
+        var _this = _super.call(this, graph, 'Concat2D', { x1: x1, x2: x2 }, new SymbolicTensor(concat_util.computeOutShape(x1.shape, x2.shape, axis))) || this;
+        _this.x1 = x1;
+        _this.x2 = x2;
+        _this.axis = axis;
+        return _this;
+    }
+    Concat2DNode.prototype.validate = function () {
+        concat_util.assertParams(this.x1.shape, this.x2.shape, this.axis);
+    };
+    Concat2DNode.X1 = 'x1';
+    Concat2DNode.X2 = 'x2';
+    Concat2DNode.AXIS = 'axis';
+    return Concat2DNode;
+}(Node));
+exports.Concat2DNode = Concat2DNode;
 var Concat3DNode = (function (_super) {
     __extends(Concat3DNode, _super);
     function Concat3DNode(graph, x1, x2, axis) {
-        var _this = _super.call(this, graph, 'Concat3D', { x1: x1, x2: x2 }, new Tensor(concat_util.computeOutShape(x1.shape, x2.shape, axis))) || this;
+        var _this = _super.call(this, graph, 'Concat3D', { x1: x1, x2: x2 }, new SymbolicTensor(concat_util.computeOutShape(x1.shape, x2.shape, axis))) || this;
         _this.x1 = x1;
         _this.x2 = x2;
         _this.axis = axis;
@@ -2799,6 +5554,24 @@ var Concat3DNode = (function (_super) {
     return Concat3DNode;
 }(Node));
 exports.Concat3DNode = Concat3DNode;
+var Concat4DNode = (function (_super) {
+    __extends(Concat4DNode, _super);
+    function Concat4DNode(graph, x1, x2, axis) {
+        var _this = _super.call(this, graph, 'Concat4D', { x1: x1, x2: x2 }, new SymbolicTensor(concat_util.computeOutShape(x1.shape, x2.shape, axis))) || this;
+        _this.x1 = x1;
+        _this.x2 = x2;
+        _this.axis = axis;
+        return _this;
+    }
+    Concat4DNode.prototype.validate = function () {
+        concat_util.assertParams(this.x1.shape, this.x2.shape, this.axis);
+    };
+    Concat4DNode.X1 = 'x1';
+    Concat4DNode.X2 = 'x2';
+    Concat4DNode.AXIS = 'axis';
+    return Concat4DNode;
+}(Node));
+exports.Concat4DNode = Concat4DNode;
 function getMatMulOutputShape(x1Shape, x2Shape) {
     if (x1Shape.length === 1 && x2Shape.length === 1) {
         return [1];
@@ -2814,7 +5587,7 @@ function getMatMulOutputShape(x1Shape, x2Shape) {
 var MatMulNode = (function (_super) {
     __extends(MatMulNode, _super);
     function MatMulNode(graph, x1, x2) {
-        var _this = _super.call(this, graph, 'MatMul', { x1: x1, x2: x2 }, new Tensor(getMatMulOutputShape(x1.shape, x2.shape))) || this;
+        var _this = _super.call(this, graph, 'MatMul', { x1: x1, x2: x2 }, new SymbolicTensor(getMatMulOutputShape(x1.shape, x2.shape))) || this;
         _this.x1 = x1;
         _this.x2 = x2;
         return _this;
@@ -2847,7 +5620,7 @@ var Convolution2DNode = (function (_super) {
     __extends(Convolution2DNode, _super);
     function Convolution2DNode(graph, x, w, b, fieldSize, outputDepth, stride, zeroPad) {
         if (stride === void 0) { stride = 1; }
-        var _this = _super.call(this, graph, 'Convolution 2D', { x: x, w: w, b: b }, new Tensor(conv_util.computeOutputShape3D(x.shape, fieldSize, outputDepth, stride, zeroPad))) || this;
+        var _this = _super.call(this, graph, 'Convolution 2D', { x: x, w: w, b: b }, new SymbolicTensor(conv_util.computeOutputShape3D(x.shape, fieldSize, outputDepth, stride, zeroPad))) || this;
         _this.x = x;
         _this.w = w;
         _this.b = b;
@@ -2877,7 +5650,7 @@ var MaxPoolNode = (function (_super) {
     __extends(MaxPoolNode, _super);
     function MaxPoolNode(graph, x, fieldSize, stride, zeroPad) {
         if (stride === void 0) { stride = 1; }
-        var _this = _super.call(this, graph, 'Max pool', { x: x }, new Tensor(conv_util.computeOutputShape3D(x.shape, fieldSize, x.shape[2], stride, zeroPad))) || this;
+        var _this = _super.call(this, graph, 'Max pool', { x: x }, new SymbolicTensor(conv_util.computeOutputShape3D(x.shape, fieldSize, x.shape[2], stride, zeroPad))) || this;
         _this.x = x;
         _this.fieldSize = fieldSize;
         _this.stride = stride;
@@ -2895,7 +5668,7 @@ exports.MaxPoolNode = MaxPoolNode;
 var ReLUNode = (function (_super) {
     __extends(ReLUNode, _super);
     function ReLUNode(graph, x) {
-        return _super.call(this, graph, 'ReLU', { x: x }, new Tensor(x.shape)) || this;
+        return _super.call(this, graph, 'ReLU', { x: x }, new SymbolicTensor(x.shape)) || this;
     }
     ReLUNode.prototype.validate = function () { };
     ReLUNode.X = 'x';
@@ -2905,7 +5678,7 @@ exports.ReLUNode = ReLUNode;
 var LeakyReLUNode = (function (_super) {
     __extends(LeakyReLUNode, _super);
     function LeakyReLUNode(graph, x, alpha) {
-        var _this = _super.call(this, graph, 'LeakyReLU', { x: x }, new Tensor(x.shape)) || this;
+        var _this = _super.call(this, graph, 'LeakyReLU', { x: x }, new SymbolicTensor(x.shape)) || this;
         _this.alpha = alpha;
         return _this;
     }
@@ -2917,7 +5690,7 @@ exports.LeakyReLUNode = LeakyReLUNode;
 var PReLUNode = (function (_super) {
     __extends(PReLUNode, _super);
     function PReLUNode(graph, x, alpha) {
-        var _this = _super.call(this, graph, 'PReLU', { x: x, alpha: alpha }, new Tensor(x.shape)) || this;
+        var _this = _super.call(this, graph, 'PReLU', { x: x, alpha: alpha }, new SymbolicTensor(x.shape)) || this;
         _this.x = x;
         _this.alpha = alpha;
         return _this;
@@ -2934,7 +5707,7 @@ exports.PReLUNode = PReLUNode;
 var EluNode = (function (_super) {
     __extends(EluNode, _super);
     function EluNode(graph, x) {
-        return _super.call(this, graph, 'Elu', { x: x }, new Tensor(x.shape)) || this;
+        return _super.call(this, graph, 'Elu', { x: x }, new SymbolicTensor(x.shape)) || this;
     }
     EluNode.prototype.validate = function () { };
     EluNode.X = 'x';
@@ -2944,7 +5717,7 @@ exports.EluNode = EluNode;
 var ExpNode = (function (_super) {
     __extends(ExpNode, _super);
     function ExpNode(graph, x) {
-        return _super.call(this, graph, 'Exp', { x: x }, new Tensor(x.shape)) || this;
+        return _super.call(this, graph, 'Exp', { x: x }, new SymbolicTensor(x.shape)) || this;
     }
     ExpNode.prototype.validate = function () { };
     ExpNode.X = 'x';
@@ -2954,7 +5727,7 @@ exports.ExpNode = ExpNode;
 var LogNode = (function (_super) {
     __extends(LogNode, _super);
     function LogNode(graph, x) {
-        return _super.call(this, graph, 'Log', { x: x }, new Tensor(x.shape)) || this;
+        return _super.call(this, graph, 'Log', { x: x }, new SymbolicTensor(x.shape)) || this;
     }
     LogNode.prototype.validate = function () { };
     LogNode.X = 'x';
@@ -2964,7 +5737,7 @@ exports.LogNode = LogNode;
 var TanHNode = (function (_super) {
     __extends(TanHNode, _super);
     function TanHNode(graph, x) {
-        return _super.call(this, graph, 'TanH', { x: x }, new Tensor(x.shape)) || this;
+        return _super.call(this, graph, 'TanH', { x: x }, new SymbolicTensor(x.shape)) || this;
     }
     TanHNode.prototype.validate = function () { };
     TanHNode.X = 'x';
@@ -2974,7 +5747,7 @@ exports.TanHNode = TanHNode;
 var SigmoidNode = (function (_super) {
     __extends(SigmoidNode, _super);
     function SigmoidNode(graph, x) {
-        return _super.call(this, graph, 'Sigmoid', { x: x }, new Tensor(x.shape)) || this;
+        return _super.call(this, graph, 'Sigmoid', { x: x }, new SymbolicTensor(x.shape)) || this;
     }
     SigmoidNode.prototype.validate = function () { };
     SigmoidNode.X = 'x';
@@ -2984,7 +5757,7 @@ exports.SigmoidNode = SigmoidNode;
 var SquareNode = (function (_super) {
     __extends(SquareNode, _super);
     function SquareNode(graph, x) {
-        return _super.call(this, graph, 'Square', { x: x }, new Tensor(x.shape)) || this;
+        return _super.call(this, graph, 'Square', { x: x }, new SymbolicTensor(x.shape)) || this;
     }
     SquareNode.prototype.validate = function () { };
     SquareNode.X = 'x';
@@ -2994,7 +5767,7 @@ exports.SquareNode = SquareNode;
 var SoftmaxCrossEntropyCostNode = (function (_super) {
     __extends(SoftmaxCrossEntropyCostNode, _super);
     function SoftmaxCrossEntropyCostNode(graph, x, target) {
-        var _this = _super.call(this, graph, 'SoftmaxCrossEntropyCost', { x: x, target: target }, new Tensor([])) || this;
+        var _this = _super.call(this, graph, 'SoftmaxCrossEntropyCost', { x: x, target: target }, new SymbolicTensor([])) || this;
         _this.x = x;
         _this.target = target;
         return _this;
@@ -3011,7 +5784,7 @@ exports.SoftmaxCrossEntropyCostNode = SoftmaxCrossEntropyCostNode;
 var SoftmaxNode = (function (_super) {
     __extends(SoftmaxNode, _super);
     function SoftmaxNode(graph, x) {
-        var _this = _super.call(this, graph, 'Softmax', { x: x }, new Tensor(x.shape)) || this;
+        var _this = _super.call(this, graph, 'Softmax', { x: x }, new SymbolicTensor(x.shape)) || this;
         _this.x = x;
         return _this;
     }
@@ -3026,7 +5799,7 @@ exports.SoftmaxNode = SoftmaxNode;
 var MeanSquaredCostNode = (function (_super) {
     __extends(MeanSquaredCostNode, _super);
     function MeanSquaredCostNode(graph, label, prediction) {
-        var _this = _super.call(this, graph, 'Mean Squared Cost', { label: label, prediction: prediction }, new Tensor([])) || this;
+        var _this = _super.call(this, graph, 'Mean Squared Cost', { label: label, prediction: prediction }, new SymbolicTensor([])) || this;
         _this.label = label;
         _this.prediction = prediction;
         return _this;
@@ -3043,7 +5816,7 @@ exports.MeanSquaredCostNode = MeanSquaredCostNode;
 var ArgMaxNode = (function (_super) {
     __extends(ArgMaxNode, _super);
     function ArgMaxNode(graph, x) {
-        var _this = _super.call(this, graph, 'ArgMax', { x: x }, new Tensor([1])) || this;
+        var _this = _super.call(this, graph, 'ArgMax', { x: x }, new SymbolicTensor([1])) || this;
         _this.x = x;
         return _this;
     }
@@ -3057,7 +5830,7 @@ exports.ArgMaxNode = ArgMaxNode;
 var ArgMaxEqualsNode = (function (_super) {
     __extends(ArgMaxEqualsNode, _super);
     function ArgMaxEqualsNode(graph, x1, x2) {
-        var _this = _super.call(this, graph, 'ArgMaxEquals', { x1: x1, x2: x2 }, new Tensor([1])) || this;
+        var _this = _super.call(this, graph, 'ArgMaxEquals', { x1: x1, x2: x2 }, new SymbolicTensor([1])) || this;
         _this.x1 = x1;
         _this.x2 = x2;
         return _this;
@@ -3072,7 +5845,222 @@ var ArgMaxEqualsNode = (function (_super) {
 }(Node));
 exports.ArgMaxEqualsNode = ArgMaxEqualsNode;
 
-},{"../initializers":52,"../math/concat_util":90,"../math/conv_util":91,"../math/ndarray":94,"../util":100}],17:[function(require,module,exports){
+},{"../ops/concat_util":113,"../ops/conv_util":115,"../tensor":146,"../util":151,"./initializers":42}],40:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../globals");
+var tensor_1 = require("../tensor");
+var session_1 = require("./session");
+var DEFAULT_EVAL_INTERVAL_MS = 1500;
+var DEFAULT_COST_INTERVAL_MS = 500;
+var DEFAULT_INFERENCE_EXAMPLE_INTERVAL_MS = 3000;
+var MetricReduction;
+(function (MetricReduction) {
+    MetricReduction[MetricReduction["SUM"] = 0] = "SUM";
+    MetricReduction[MetricReduction["MEAN"] = 1] = "MEAN";
+})(MetricReduction = exports.MetricReduction || (exports.MetricReduction = {}));
+var GraphRunner = (function () {
+    function GraphRunner(math, session, eventObserver) {
+        this.math = math;
+        this.session = session;
+        this.eventObserver = eventObserver;
+        this.lastCostTimestamp = 0;
+        this.lastEvalTimestamp = 0;
+        this.resetStatistics();
+        this.zeroScalar = tensor_1.Scalar.new(0);
+    }
+    GraphRunner.prototype.resetStatistics = function () {
+        this.totalBatchesTrained = 0;
+    };
+    GraphRunner.prototype.train = function (costTensor, trainFeedEntries, batchSize, optimizer, numBatches, metricTensor, metricFeedEntries, metricBatchSize, metricReduction, evalIntervalMs, costIntervalMs) {
+        if (metricReduction === void 0) { metricReduction = MetricReduction.MEAN; }
+        if (evalIntervalMs === void 0) { evalIntervalMs = DEFAULT_EVAL_INTERVAL_MS; }
+        if (costIntervalMs === void 0) { costIntervalMs = DEFAULT_COST_INTERVAL_MS; }
+        this.costTensor = costTensor;
+        this.trainFeedEntries = trainFeedEntries;
+        this.metricTensor = metricTensor;
+        this.metricFeedEntries = metricFeedEntries;
+        if (metricBatchSize != null && this.metricBatchSize !== metricBatchSize) {
+            if (this.metricBatchSizeScalar != null) {
+                this.metricBatchSizeScalar.dispose();
+            }
+            this.metricBatchSizeScalar = tensor_1.Scalar.new(metricBatchSize);
+        }
+        this.metricBatchSize = metricBatchSize;
+        this.metricReduction = metricReduction;
+        this.batchSize = batchSize;
+        this.optimizer = optimizer;
+        this.metricIntervalMs = evalIntervalMs;
+        this.costIntervalMs = costIntervalMs;
+        this.currentTrainLoopNumBatches = numBatches;
+        this.batchesTrainedThisRun = 0;
+        this.isTraining = true;
+        this.trainStartTimestamp = performance.now();
+        this.trainNetwork();
+    };
+    GraphRunner.prototype.stopTraining = function () {
+        this.isTraining = false;
+    };
+    GraphRunner.prototype.resumeTraining = function () {
+        this.isTraining = true;
+        this.trainNetwork();
+    };
+    GraphRunner.prototype.trainNetwork = function () {
+        var _this = this;
+        if (this.batchesTrainedThisRun === this.currentTrainLoopNumBatches) {
+            this.stopTraining();
+        }
+        if (!this.isTraining) {
+            if (this.eventObserver.doneTrainingCallback != null) {
+                this.eventObserver.doneTrainingCallback();
+            }
+            return;
+        }
+        var start = performance.now();
+        var shouldComputeCost = this.eventObserver.avgCostCallback != null &&
+            (start - this.lastCostTimestamp > this.costIntervalMs);
+        if (shouldComputeCost) {
+            this.lastCostTimestamp = start;
+        }
+        var costReduction = shouldComputeCost ? session_1.CostReduction.MEAN : session_1.CostReduction.NONE;
+        globals_1.tidy(function () {
+            var avgCost = _this.session.train(_this.costTensor, _this.trainFeedEntries, _this.batchSize, _this.optimizer, costReduction);
+            if (shouldComputeCost) {
+                var trainTime = performance.now() - start;
+                _this.eventObserver.avgCostCallback(avgCost);
+                if (_this.eventObserver.trainExamplesPerSecCallback != null) {
+                    var examplesPerSec = (_this.batchSize * 1000 / trainTime);
+                    _this.eventObserver.trainExamplesPerSecCallback(examplesPerSec);
+                }
+            }
+            if (_this.eventObserver.metricCallback != null &&
+                _this.metricFeedEntries != null &&
+                start - _this.lastEvalTimestamp > _this.metricIntervalMs) {
+                _this.lastEvalTimestamp = start;
+                if (_this.lastComputedMetric != null) {
+                    _this.lastComputedMetric.dispose();
+                }
+                _this.lastComputedMetric = _this.computeMetric();
+                _this.eventObserver.metricCallback(_this.lastComputedMetric);
+            }
+            if (_this.eventObserver.totalTimeCallback != null) {
+                _this.eventObserver.totalTimeCallback((start - _this.trainStartTimestamp) / 1000);
+            }
+            _this.batchesTrainedThisRun++;
+            _this.totalBatchesTrained++;
+            if (_this.eventObserver.batchesTrainedCallback != null) {
+                _this.eventObserver.batchesTrainedCallback(_this.totalBatchesTrained);
+            }
+        });
+        requestAnimationFrame(function () { return _this.trainNetwork(); });
+    };
+    GraphRunner.prototype.infer = function (inferenceTensor, inferenceFeedEntries, inferenceExampleIntervalMs, inferenceExampleCount, numPasses) {
+        var _this = this;
+        if (inferenceExampleIntervalMs === void 0) { inferenceExampleIntervalMs = DEFAULT_INFERENCE_EXAMPLE_INTERVAL_MS; }
+        if (inferenceExampleCount === void 0) { inferenceExampleCount = 5; }
+        if (this.eventObserver.inferenceExamplesCallback == null &&
+            this.eventObserver.inferenceExamplesPerSecCallback == null) {
+            throw new Error('Cannot start inference loop, no inference example or ' +
+                'examples/sec observer provided.');
+        }
+        for (var i = 0; i < inferenceFeedEntries.length; i++) {
+            var feedEntry = inferenceFeedEntries[i];
+            if (feedEntry.data instanceof tensor_1.Tensor) {
+                throw new Error('Cannot start inference on the model runner with feed entries of ' +
+                    'type NDArray. Please use InputProviders.');
+            }
+        }
+        this.inferenceExampleIntervalMs = inferenceExampleIntervalMs;
+        this.inferenceTensor = inferenceTensor;
+        this.inferenceFeedEntries = inferenceFeedEntries;
+        this.inferenceExampleCount = inferenceExampleCount;
+        this.currentInferenceLoopNumPasses = numPasses;
+        if (!this.isInferring) {
+            this.inferencePassesThisRun = 0;
+            requestAnimationFrame(function () { return _this.inferNetwork(); });
+        }
+        this.isInferring = true;
+    };
+    GraphRunner.prototype.inferNetwork = function () {
+        var _this = this;
+        if (!this.isInferring ||
+            this.inferencePassesThisRun === this.currentInferenceLoopNumPasses) {
+            return;
+        }
+        globals_1.tidy(function () {
+            var feeds = [];
+            var inferenceValues = [];
+            var start = performance.now();
+            for (var i = 0; i < _this.inferenceExampleCount; i++) {
+                var ndarrayFeedEntries = [];
+                for (var j = 0; j < _this.inferenceFeedEntries.length; j++) {
+                    var feedEntry = _this.inferenceFeedEntries[j];
+                    var nextCopy = feedEntry.data.getNextCopy();
+                    ndarrayFeedEntries.push({ tensor: feedEntry.tensor, data: nextCopy });
+                }
+                feeds.push(ndarrayFeedEntries);
+                inferenceValues.push(_this.session.eval(_this.inferenceTensor, ndarrayFeedEntries));
+            }
+            if (_this.eventObserver.inferenceExamplesPerSecCallback != null) {
+                inferenceValues[inferenceValues.length - 1].dataSync();
+                var inferenceExamplesPerSecTime = performance.now() - start;
+                var examplesPerSec = (_this.inferenceExampleCount * 1000 / inferenceExamplesPerSecTime);
+                _this.eventObserver.inferenceExamplesPerSecCallback(examplesPerSec);
+            }
+            if (_this.eventObserver.inferenceExamplesCallback != null) {
+                _this.eventObserver.inferenceExamplesCallback(feeds, inferenceValues);
+            }
+            _this.inferencePassesThisRun++;
+        });
+        this.lastInferTimeoutID = window.setTimeout(function () { return _this.inferNetwork(); }, this.inferenceExampleIntervalMs);
+    };
+    GraphRunner.prototype.stopInferring = function () {
+        this.isInferring = false;
+        window.clearTimeout(this.lastInferTimeoutID);
+    };
+    GraphRunner.prototype.isInferenceRunning = function () {
+        return this.isInferring;
+    };
+    GraphRunner.prototype.computeMetric = function () {
+        var _this = this;
+        if (this.metricFeedEntries == null) {
+            throw new Error('Cannot compute metric, no metric FeedEntries provided.');
+        }
+        var metric = this.zeroScalar;
+        return globals_1.tidy(function () {
+            for (var i = 0; i < _this.metricBatchSize; i++) {
+                var metricValue = _this.session.eval(_this.metricTensor, _this.metricFeedEntries);
+                metric = _this.math.add(metric, metricValue.toFloat());
+            }
+            if (_this.metricReduction === MetricReduction.MEAN) {
+                metric = _this.math.divide(metric, _this.metricBatchSizeScalar);
+            }
+            return metric;
+        });
+    };
+    GraphRunner.prototype.getTotalBatchesTrained = function () {
+        return this.totalBatchesTrained;
+    };
+    GraphRunner.prototype.getLastComputedMetric = function () {
+        return this.lastComputedMetric;
+    };
+    GraphRunner.prototype.setMath = function (math) {
+        this.math = math;
+    };
+    GraphRunner.prototype.setSession = function (session) {
+        this.session = session;
+    };
+    GraphRunner.prototype.setInferenceTensor = function (inferenceTensor) {
+        this.inferenceTensor = inferenceTensor;
+    };
+    GraphRunner.prototype.setInferenceExampleCount = function (inferenceExampleCount) {
+        this.inferenceExampleCount = inferenceExampleCount;
+    };
+    return GraphRunner;
+}());
+exports.GraphRunner = GraphRunner;
+
+},{"../globals":35,"../tensor":146,"./session":64}],41:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var graph_1 = require("./graph");
@@ -3149,7 +6137,127 @@ function isPassthroughNode(node, map) {
 }
 exports.isPassthroughNode = isPassthroughNode;
 
-},{"./graph":16,"./priority_queue":46}],18:[function(require,module,exports){
+},{"./graph":39,"./priority_queue":63}],42:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var ops = require("../ops/ops");
+var VarianceScalingInitializer = (function () {
+    function VarianceScalingInitializer(scale, mode, distribution) {
+        if (scale === void 0) { scale = 1.0; }
+        if (mode === void 0) { mode = 'fan_in'; }
+        if (distribution === void 0) { distribution = 'normal'; }
+        this.scale = scale;
+        this.mode = mode;
+        this.distribution = distribution;
+    }
+    VarianceScalingInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
+        var n = 0;
+        if (this.mode === 'fan_in') {
+            n = inputUnits;
+        }
+        else if (this.mode === 'fan_out') {
+            n = outputUnits;
+        }
+        else if (this.mode === 'fan_avg') {
+            n = (inputUnits + outputUnits) / 2;
+        }
+        else {
+            throw new Error("Unexpected mode for variance scaling initializer: " + this.mode);
+        }
+        if (this.distribution === 'normal') {
+            return ops.truncatedNormal(weightsShape, 0.0, Math.sqrt(this.scale / n));
+        }
+        else if (this.distribution === 'uniform') {
+            return ops.randomUniform(weightsShape, 0.0, Math.sqrt(3 * this.scale / n));
+        }
+        else {
+            throw new Error("Unexpected distribution for variance scaling initializer: " +
+                ("" + this.distribution));
+        }
+    };
+    return VarianceScalingInitializer;
+}());
+exports.VarianceScalingInitializer = VarianceScalingInitializer;
+var ZerosInitializer = (function () {
+    function ZerosInitializer() {
+    }
+    ZerosInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
+        return ops.zeros(weightsShape);
+    };
+    return ZerosInitializer;
+}());
+exports.ZerosInitializer = ZerosInitializer;
+var OnesInitializer = (function () {
+    function OnesInitializer() {
+    }
+    OnesInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
+        return ops.ones(weightsShape);
+    };
+    return OnesInitializer;
+}());
+exports.OnesInitializer = OnesInitializer;
+var ConstantInitializer = (function () {
+    function ConstantInitializer(value) {
+        if (value === void 0) { value = 0; }
+        this.value = value;
+    }
+    ConstantInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
+        return ops.fill(weightsShape, this.value);
+    };
+    return ConstantInitializer;
+}());
+exports.ConstantInitializer = ConstantInitializer;
+var TensorInitializer = (function () {
+    function TensorInitializer(tensor) {
+        this.tensor = tensor;
+    }
+    TensorInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
+        return this.tensor;
+    };
+    return TensorInitializer;
+}());
+exports.TensorInitializer = TensorInitializer;
+var RandomNormalInitializer = (function () {
+    function RandomNormalInitializer(mean, stdev) {
+        if (mean === void 0) { mean = 0; }
+        if (stdev === void 0) { stdev = .05; }
+        this.mean = mean;
+        this.stdev = stdev;
+    }
+    RandomNormalInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
+        return ops.randomNormal(weightsShape, this.mean, this.stdev);
+    };
+    return RandomNormalInitializer;
+}());
+exports.RandomNormalInitializer = RandomNormalInitializer;
+var RandomTruncatedNormalInitializer = (function () {
+    function RandomTruncatedNormalInitializer(mean, stdev) {
+        if (mean === void 0) { mean = 0; }
+        if (stdev === void 0) { stdev = .05; }
+        this.mean = mean;
+        this.stdev = stdev;
+    }
+    RandomTruncatedNormalInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
+        return ops.truncatedNormal(weightsShape, this.mean, this.stdev);
+    };
+    return RandomTruncatedNormalInitializer;
+}());
+exports.RandomTruncatedNormalInitializer = RandomTruncatedNormalInitializer;
+var RandomUniformInitializer = (function () {
+    function RandomUniformInitializer(minval, maxval) {
+        if (minval === void 0) { minval = -.05; }
+        if (maxval === void 0) { maxval = .05; }
+        this.minval = minval;
+        this.maxval = maxval;
+    }
+    RandomUniformInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
+        return ops.randomUniform(weightsShape, this.minval, this.maxval);
+    };
+    return RandomUniformInitializer;
+}());
+exports.RandomUniformInitializer = RandomUniformInitializer;
+
+},{"../ops/ops":123}],43:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var graph_1 = require("./graph");
@@ -3157,7 +6265,7 @@ var graph_util = require("./graph_util");
 var add_1 = require("./ops/add");
 var argmax_1 = require("./ops/argmax");
 var argmaxequals_1 = require("./ops/argmaxequals");
-var concat3d_1 = require("./ops/concat3d");
+var concat_1 = require("./ops/concat");
 var convolution_1 = require("./ops/convolution");
 var divide_1 = require("./ops/divide");
 var element_wise_activation_1 = require("./ops/element_wise_activation");
@@ -3243,8 +6351,17 @@ function emitOpFromNode(node) {
     else if (node instanceof graph_1.FusedLinearCombinationNode) {
         return [new linear_combination_1.LinearCombination(node.inputs[graph_1.FusedLinearCombinationNode.T1], node.inputs[graph_1.FusedLinearCombinationNode.T2], node.inputs[graph_1.FusedLinearCombinationNode.C1], node.inputs[graph_1.FusedLinearCombinationNode.C2], node.output)];
     }
+    else if (node instanceof graph_1.Concat1DNode) {
+        return [new concat_1.Concat1D(node.inputs[graph_1.Concat1DNode.X1], node.inputs[graph_1.Concat1DNode.X2], node.output)];
+    }
+    else if (node instanceof graph_1.Concat2DNode) {
+        return [new concat_1.Concat2D(node.inputs[graph_1.Concat2DNode.X1], node.inputs[graph_1.Concat2DNode.X2], node.axis, node.output)];
+    }
     else if (node instanceof graph_1.Concat3DNode) {
-        return [new concat3d_1.Concat3D(node.inputs[graph_1.Concat3DNode.X1], node.inputs[graph_1.Concat3DNode.X2], node.axis, node.output)];
+        return [new concat_1.Concat3D(node.inputs[graph_1.Concat3DNode.X1], node.inputs[graph_1.Concat3DNode.X2], node.axis, node.output)];
+    }
+    else if (node instanceof graph_1.Concat4DNode) {
+        return [new concat_1.Concat4D(node.inputs[graph_1.Concat4DNode.X1], node.inputs[graph_1.Concat4DNode.X2], node.axis, node.output)];
     }
     else if (node instanceof graph_1.SquareNode) {
         return [new element_wise_activation_1.Square(node.inputs[graph_1.SquareNode.X], node.output)];
@@ -3272,7 +6389,7 @@ function emitOpFromNode(node) {
     }
 }
 
-},{"./graph":16,"./graph_util":17,"./ops/add":19,"./ops/argmax":20,"./ops/argmaxequals":21,"./ops/concat3d":22,"./ops/convolution":23,"./ops/divide":24,"./ops/element_wise_activation":25,"./ops/element_wise_cost":26,"./ops/exp":27,"./ops/linear_combination":28,"./ops/log":29,"./ops/matmul":30,"./ops/max_pool":31,"./ops/multiply":32,"./ops/reduce_sum":34,"./ops/reshape":35,"./ops/softmax":36,"./ops/subtract":37}],19:[function(require,module,exports){
+},{"./graph":39,"./graph_util":41,"./ops/add":44,"./ops/argmax":45,"./ops/argmaxequals":46,"./ops/concat":47,"./ops/convolution":48,"./ops/divide":49,"./ops/element_wise_activation":50,"./ops/element_wise_cost":51,"./ops/exp":52,"./ops/linear_combination":53,"./ops/log":54,"./ops/matmul":55,"./ops/max_pool":56,"./ops/multiply":57,"./ops/reduce_sum":59,"./ops/reshape":60,"./ops/softmax":61,"./ops/subtract":62}],44:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -3285,6 +6402,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../../globals");
 var util = require("../../util");
 var graph_util = require("../graph_util");
 var op_1 = require("./op");
@@ -3310,7 +6428,7 @@ var Add = (function (_super) {
         var _this = this;
         var x1 = inferenceArrays.get(this.x1Tensor);
         var x2 = inferenceArrays.get(this.x2Tensor);
-        math.scope(function (keep) {
+        globals_1.tidy(function () {
             var result;
             if (util.isScalarShape(x1.shape)) {
                 result = math.scalarPlusArray(x1, x2);
@@ -3321,13 +6439,13 @@ var Add = (function (_super) {
             else {
                 result = math.add(x1, x2);
             }
-            inferenceArrays.set(_this.yTensor, keep(result));
+            inferenceArrays.set(_this.yTensor, globals_1.keep(result));
         });
     };
     Add.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
         var _this = this;
         var dy = gradientArrays.get(this.yTensor);
-        math.scope(function () {
+        globals_1.tidy(function () {
             if (graph_util.shouldBackProp(_this.x1Tensor)) {
                 if (_this.x1Tensor.shape.length === 1 &&
                     _this.x2Tensor.shape.length === 2 &&
@@ -3369,7 +6487,7 @@ var Add = (function (_super) {
 }(op_1.Operation));
 exports.Add = Add;
 
-},{"../../util":100,"../graph_util":17,"./op":33}],20:[function(require,module,exports){
+},{"../../globals":35,"../../util":151,"../graph_util":41,"./op":58}],45:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -3382,6 +6500,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../../globals");
 var op_1 = require("./op");
 var ArgMax = (function (_super) {
     __extends(ArgMax, _super);
@@ -3394,8 +6513,8 @@ var ArgMax = (function (_super) {
     ArgMax.prototype.feedForward = function (math, inferenceArrays) {
         var _this = this;
         var x = inferenceArrays.get(this.xTensor);
-        math.scope(function (keep) {
-            inferenceArrays.set(_this.yTensor, keep(math.argMax(x)));
+        globals_1.tidy(function () {
+            inferenceArrays.set(_this.yTensor, globals_1.keep(math.argMax(x)));
         });
     };
     ArgMax.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
@@ -3405,7 +6524,7 @@ var ArgMax = (function (_super) {
 }(op_1.Operation));
 exports.ArgMax = ArgMax;
 
-},{"./op":33}],21:[function(require,module,exports){
+},{"../../globals":35,"./op":58}],46:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -3418,6 +6537,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../../globals");
 var op_1 = require("./op");
 var ArgMaxEquals = (function (_super) {
     __extends(ArgMaxEquals, _super);
@@ -3432,8 +6552,8 @@ var ArgMaxEquals = (function (_super) {
         var _this = this;
         var x1 = inferenceArrays.get(this.x1Tensor);
         var x2 = inferenceArrays.get(this.x2Tensor);
-        math.scope(function (keep) {
-            inferenceArrays.set(_this.yTensor, keep(math.argMaxEquals(x1, x2)));
+        globals_1.tidy(function () {
+            inferenceArrays.set(_this.yTensor, globals_1.keep(math.argMaxEquals(x1, x2)));
         });
     };
     ArgMaxEquals.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
@@ -3443,7 +6563,7 @@ var ArgMaxEquals = (function (_super) {
 }(op_1.Operation));
 exports.ArgMaxEquals = ArgMaxEquals;
 
-},{"./op":33}],22:[function(require,module,exports){
+},{"../../globals":35,"./op":58}],47:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -3456,8 +6576,66 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-var concat_util = require("../../math/concat_util");
+var globals_1 = require("../../globals");
+var concat_util = require("../../ops/concat_util");
+var util = require("../../util");
 var op_1 = require("./op");
+var Concat1D = (function (_super) {
+    __extends(Concat1D, _super);
+    function Concat1D(x1Tensor, x2Tensor, yTensor) {
+        var _this = _super.call(this) || this;
+        _this.x1Tensor = x1Tensor;
+        _this.x2Tensor = x2Tensor;
+        _this.yTensor = yTensor;
+        return _this;
+    }
+    Concat1D.prototype.feedForward = function (math, inferecenArrays) {
+        var _this = this;
+        var x1 = inferecenArrays.get(this.x1Tensor);
+        var x2 = inferecenArrays.get(this.x2Tensor);
+        globals_1.tidy(function () {
+            var concatResult = math.concat1D(x1, x2);
+            inferecenArrays.set(_this.yTensor, globals_1.keep(concatResult));
+        });
+    };
+    Concat1D.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
+        var _this = this;
+        globals_1.tidy(function () {
+            concatBackProp(math, _this.x1Tensor, _this.x2Tensor, _this.yTensor, 0, gradientArrays, inferenceArrays);
+        });
+    };
+    return Concat1D;
+}(op_1.Operation));
+exports.Concat1D = Concat1D;
+var Concat2D = (function (_super) {
+    __extends(Concat2D, _super);
+    function Concat2D(x1Tensor, x2Tensor, axis, yTensor) {
+        var _this = _super.call(this) || this;
+        _this.x1Tensor = x1Tensor;
+        _this.x2Tensor = x2Tensor;
+        _this.axis = axis;
+        _this.yTensor = yTensor;
+        concat_util.assertParams(x1Tensor.shape, x2Tensor.shape, axis);
+        return _this;
+    }
+    Concat2D.prototype.feedForward = function (math, inferecenArrays) {
+        var _this = this;
+        var x1 = inferecenArrays.get(this.x1Tensor);
+        var x2 = inferecenArrays.get(this.x2Tensor);
+        globals_1.tidy(function () {
+            var concatResult = math.concat2D(x1, x2, _this.axis);
+            inferecenArrays.set(_this.yTensor, globals_1.keep(concatResult));
+        });
+    };
+    Concat2D.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
+        var _this = this;
+        globals_1.tidy(function () {
+            concatBackProp(math, _this.x1Tensor, _this.x2Tensor, _this.yTensor, _this.axis, gradientArrays, inferenceArrays);
+        });
+    };
+    return Concat2D;
+}(op_1.Operation));
+exports.Concat2D = Concat2D;
 var Concat3D = (function (_super) {
     __extends(Concat3D, _super);
     function Concat3D(x1Tensor, x2Tensor, axis, yTensor) {
@@ -3473,19 +6651,64 @@ var Concat3D = (function (_super) {
         var _this = this;
         var x1 = inferenceArrays.get(this.x1Tensor);
         var x2 = inferenceArrays.get(this.x2Tensor);
-        math.scope(function (keep) {
+        globals_1.tidy(function () {
             var concatResult = math.concat3D(x1, x2, _this.axis);
-            inferenceArrays.set(_this.yTensor, keep(concatResult));
+            inferenceArrays.set(_this.yTensor, globals_1.keep(concatResult));
         });
     };
     Concat3D.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
-        throw new Error('Concat3D backprop not implemented.');
+        var _this = this;
+        globals_1.tidy(function () {
+            concatBackProp(math, _this.x1Tensor, _this.x2Tensor, _this.yTensor, _this.axis, gradientArrays, inferenceArrays);
+        });
     };
     return Concat3D;
 }(op_1.Operation));
 exports.Concat3D = Concat3D;
+var Concat4D = (function (_super) {
+    __extends(Concat4D, _super);
+    function Concat4D(x1Tensor, x2Tensor, axis, yTensor) {
+        var _this = _super.call(this) || this;
+        _this.x1Tensor = x1Tensor;
+        _this.x2Tensor = x2Tensor;
+        _this.axis = axis;
+        _this.yTensor = yTensor;
+        concat_util.assertParams(x1Tensor.shape, x2Tensor.shape, axis);
+        return _this;
+    }
+    Concat4D.prototype.feedForward = function (math, inferecenArrays) {
+        var _this = this;
+        var x1 = inferecenArrays.get(this.x1Tensor);
+        var x2 = inferecenArrays.get(this.x2Tensor);
+        globals_1.tidy(function () {
+            var concatResult = math.concat4D(x1, x2, _this.axis);
+            inferecenArrays.set(_this.yTensor, globals_1.keep(concatResult));
+        });
+    };
+    Concat4D.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
+        var _this = this;
+        globals_1.tidy(function () {
+            concatBackProp(math, _this.x1Tensor, _this.x2Tensor, _this.yTensor, _this.axis, gradientArrays, inferenceArrays);
+        });
+    };
+    return Concat4D;
+}(op_1.Operation));
+exports.Concat4D = Concat4D;
+function concatBackProp(math, aTensor, bTensor, yTensor, axis, gradArrays, infArrays) {
+    var dy = gradArrays.get(yTensor);
+    var a = infArrays.get(aTensor);
+    var b = infArrays.get(bTensor);
+    var a2D = a.as2D(-1, util.sizeFromShape(a.shape.slice(axis)));
+    var b2D = b.as2D(-1, util.sizeFromShape(b.shape.slice(axis)));
+    var _a = concat_util.computeGradientSliceShapes(a2D.shape, b2D.shape), aBegin = _a.aBegin, aSize = _a.aSize, bBegin = _a.bBegin, bSize = _a.bSize;
+    var dy2D = dy.as2D(-1, a2D.shape[1] + b2D.shape[1]);
+    var slice1Result = math.slice2D(dy2D, aBegin, aSize).reshapeAs(a);
+    var slice2Result = math.slice2D(dy2D, bBegin, bSize).reshapeAs(b);
+    gradArrays.add(aTensor, slice1Result);
+    gradArrays.add(bTensor, slice2Result);
+}
 
-},{"../../math/concat_util":90,"./op":33}],23:[function(require,module,exports){
+},{"../../globals":35,"../../ops/concat_util":113,"../../util":151,"./op":58}],48:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -3498,7 +6721,8 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-var conv_util = require("../../math/conv_util");
+var globals_1 = require("../../globals");
+var conv_util = require("../../ops/conv_util");
 var util = require("../../util");
 var op_1 = require("./op");
 var Convolution2D = (function (_super) {
@@ -3526,8 +6750,8 @@ var Convolution2D = (function (_super) {
         var weights = inferenceArrays.get(this.wTensor);
         var biases = inferenceArrays.get(this.bTensor);
         var x = inferenceArrays.get(this.xTensor);
-        math.scope(function (keep) {
-            inferenceArrays.set(_this.yTensor, keep(math.conv2d(x, weights, biases, _this.stride, _this.zeroPad)));
+        globals_1.tidy(function () {
+            inferenceArrays.set(_this.yTensor, globals_1.keep(math.conv2d(x, weights, biases, _this.stride, _this.zeroPad)));
         });
     };
     Convolution2D.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
@@ -3535,9 +6759,9 @@ var Convolution2D = (function (_super) {
         var filter = inferenceArrays.get(this.wTensor);
         var x = inferenceArrays.get(this.xTensor);
         var dy = gradientArrays.get(this.yTensor);
-        math.scope(function () {
+        globals_1.tidy(function () {
             var dw = math.conv2dDerFilter(x, dy, filter.shape, _this.stride, _this.zeroPad);
-            var db = math.conv2dDerBias(dy);
+            var db = math.sum(dy, [0, 1]);
             var dx = math.conv2dDerInput(x.shape, dy, filter, _this.stride, _this.zeroPad);
             gradientArrays.add(_this.wTensor, dw);
             gradientArrays.add(_this.bTensor, db);
@@ -3556,7 +6780,7 @@ var Convolution2D = (function (_super) {
 }(op_1.Operation));
 exports.Convolution2D = Convolution2D;
 
-},{"../../math/conv_util":91,"../../util":100,"./op":33}],24:[function(require,module,exports){
+},{"../../globals":35,"../../ops/conv_util":115,"../../util":151,"./op":58}],49:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -3569,6 +6793,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../../globals");
 var util = require("../../util");
 var graph_util = require("../graph_util");
 var op_1 = require("./op");
@@ -3589,7 +6814,7 @@ var Divide = (function (_super) {
         var _this = this;
         var t1 = inferenceArrays.get(this.x1Tensor);
         var t2 = inferenceArrays.get(this.x2Tensor);
-        math.scope(function (keep) {
+        globals_1.tidy(function () {
             var result;
             if (util.isScalarShape(t1.shape)) {
                 result = math.scalarDividedByArray(t1, t2);
@@ -3600,7 +6825,7 @@ var Divide = (function (_super) {
             else {
                 result = math.divide(t1, t2);
             }
-            inferenceArrays.set(_this.yTensor, keep(result));
+            inferenceArrays.set(_this.yTensor, globals_1.keep(result));
         });
     };
     Divide.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
@@ -3610,7 +6835,7 @@ var Divide = (function (_super) {
         var dy = gradientArrays.get(this.yTensor);
         var x1IsScalar = util.isScalarShape(x1.shape);
         var x2IsScalar = util.isScalarShape(x2.shape);
-        math.scope(function () {
+        globals_1.tidy(function () {
             if (graph_util.shouldBackProp(_this.x1Tensor)) {
                 if (x1IsScalar) {
                     var div = math.divide(dy, x2);
@@ -3651,7 +6876,7 @@ var Divide = (function (_super) {
 }(op_1.Operation));
 exports.Divide = Divide;
 
-},{"../../util":100,"../graph_util":17,"./op":33}],25:[function(require,module,exports){
+},{"../../globals":35,"../../util":151,"../graph_util":41,"./op":58}],50:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -3664,7 +6889,8 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-var activation_functions_1 = require("../../math/activation_functions");
+var globals_1 = require("../../globals");
+var activation_functions_1 = require("../activation_functions");
 var op_1 = require("./op");
 var ElementWiseActivation = (function (_super) {
     __extends(ElementWiseActivation, _super);
@@ -3678,8 +6904,8 @@ var ElementWiseActivation = (function (_super) {
     ElementWiseActivation.prototype.feedForward = function (math, inferenceArrays) {
         var _this = this;
         var x = inferenceArrays.get(this.xTensor);
-        math.scope(function (keep) {
-            inferenceArrays.set(_this.yTensor, keep(_this.func.output(math, x)));
+        globals_1.tidy(function () {
+            inferenceArrays.set(_this.yTensor, globals_1.keep(_this.func.output(math, x)));
         });
     };
     ElementWiseActivation.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
@@ -3687,7 +6913,7 @@ var ElementWiseActivation = (function (_super) {
         var x = inferenceArrays.get(this.xTensor);
         var y = inferenceArrays.get(this.yTensor);
         var dy = gradientArrays.get(this.yTensor);
-        math.scope(function () {
+        globals_1.tidy(function () {
             var dydx = _this.func.der(math, x, y);
             gradientArrays.add(_this.xTensor, math.elementWiseMul(dy, dydx));
             dydx.dispose();
@@ -3760,25 +6986,18 @@ var PReLU = (function (_super) {
         var _this = this;
         var x = inferenceArrays.get(this.xTensor);
         var alpha = inferenceArrays.get(this.alphaTensor);
-        math.scope(function (keep) {
-            inferenceArrays.set(_this.yTensor, keep(math.prelu(x, alpha)));
+        globals_1.tidy(function () {
+            inferenceArrays.set(_this.yTensor, globals_1.keep(math.prelu(x, alpha)));
         });
     };
     PReLU.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
-        var _this = this;
-        var x = inferenceArrays.get(this.xTensor);
-        var alpha = inferenceArrays.get(this.alphaTensor);
-        var dy = gradientArrays.get(this.yTensor);
-        math.scope(function () {
-            var dydx = math.preluDer(x, alpha);
-            gradientArrays.add(_this.xTensor, math.elementWiseMul(dy, dydx));
-        });
+        throw new Error('Not implemented');
     };
     return PReLU;
 }(op_1.Operation));
 exports.PReLU = PReLU;
 
-},{"../../math/activation_functions":53,"./op":33}],26:[function(require,module,exports){
+},{"../../globals":35,"../activation_functions":37,"./op":58}],51:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -3792,9 +7011,10 @@ var __extends = (this && this.__extends) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 var environment_1 = require("../../environment");
-var cost_functions_1 = require("../../math/cost_functions");
-var ndarray_1 = require("../../math/ndarray");
+var globals_1 = require("../../globals");
+var tensor_1 = require("../../tensor");
 var util = require("../../util");
+var cost_functions_1 = require("../cost_functions");
 var graph_util = require("../graph_util");
 var op_1 = require("./op");
 var ElementWiseCost = (function (_super) {
@@ -3806,30 +7026,30 @@ var ElementWiseCost = (function (_super) {
         _this.yTensor = yTensor;
         _this.func = func;
         _this.oneOverNScalar =
-            environment_1.ENV.math.keep(ndarray_1.Scalar.new(1 / util.sizeFromShape(x1Tensor.shape)));
+            environment_1.ENV.math.keep(tensor_1.Scalar.new(1 / util.sizeFromShape(x1Tensor.shape)));
         return _this;
     }
     ElementWiseCost.prototype.feedForward = function (math, inferenceArrays) {
         var _this = this;
         var x1 = inferenceArrays.get(this.x1Tensor);
         var x2 = inferenceArrays.get(this.x2Tensor);
-        math.scope(function (keep) {
-            var elementWiseCost = _this.func.cost(math, x1, x2);
+        globals_1.tidy(function () {
+            var elementWiseCost = _this.func.cost(x1, x2);
             var sum = math.sum(elementWiseCost);
             var result = math.scalarTimesArray(_this.oneOverNScalar, sum);
-            inferenceArrays.set(_this.yTensor, keep(result));
+            inferenceArrays.set(_this.yTensor, globals_1.keep(result));
         });
     };
     ElementWiseCost.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
         var _this = this;
         var x1 = inferenceArrays.get(this.x1Tensor);
         var x2 = inferenceArrays.get(this.x2Tensor);
-        math.scope(function () {
+        globals_1.tidy(function () {
             if (graph_util.shouldBackProp(_this.x1Tensor)) {
-                gradientArrays.add(_this.x1Tensor, _this.func.der(math, x1, x2));
+                gradientArrays.add(_this.x1Tensor, _this.func.der(x1, x2));
             }
             if (graph_util.shouldBackProp(_this.x2Tensor)) {
-                gradientArrays.add(_this.x2Tensor, _this.func.der(math, x2, x1));
+                gradientArrays.add(_this.x2Tensor, _this.func.der(x2, x1));
             }
         });
     };
@@ -3849,7 +7069,7 @@ var MeanSquaredCost = (function (_super) {
 }(ElementWiseCost));
 exports.MeanSquaredCost = MeanSquaredCost;
 
-},{"../../environment":15,"../../math/cost_functions":92,"../../math/ndarray":94,"../../util":100,"../graph_util":17,"./op":33}],27:[function(require,module,exports){
+},{"../../environment":34,"../../globals":35,"../../tensor":146,"../../util":151,"../cost_functions":38,"../graph_util":41,"./op":58}],52:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -3862,6 +7082,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../../globals");
 var graph_util = require("../graph_util");
 var op_1 = require("./op");
 var Exp = (function (_super) {
@@ -3875,15 +7096,15 @@ var Exp = (function (_super) {
     Exp.prototype.feedForward = function (math, inferenceArrays) {
         var _this = this;
         var x = inferenceArrays.get(this.xTensor);
-        math.scope(function (keep) {
-            inferenceArrays.set(_this.yTensor, keep(math.exp(x)));
+        globals_1.tidy(function () {
+            inferenceArrays.set(_this.yTensor, globals_1.keep(math.exp(x)));
         });
     };
     Exp.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
         var _this = this;
         var y = inferenceArrays.get(this.yTensor);
         var dy = gradientArrays.get(this.yTensor);
-        math.scope(function () {
+        globals_1.tidy(function () {
             if (graph_util.shouldBackProp(_this.xTensor)) {
                 gradientArrays.add(_this.xTensor, math.elementWiseMul(y, dy));
             }
@@ -3893,7 +7114,7 @@ var Exp = (function (_super) {
 }(op_1.Operation));
 exports.Exp = Exp;
 
-},{"../graph_util":17,"./op":33}],28:[function(require,module,exports){
+},{"../../globals":35,"../graph_util":41,"./op":58}],53:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -3906,6 +7127,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../../globals");
 var graph_util = require("../graph_util");
 var op_1 = require("./op");
 var LinearCombination = (function (_super) {
@@ -3925,8 +7147,8 @@ var LinearCombination = (function (_super) {
         var x2 = inferenceArrays.get(this.x2Tensor);
         var c1 = inferenceArrays.get(this.c1Tensor).asScalar();
         var c2 = inferenceArrays.get(this.c2Tensor).asScalar();
-        math.scope(function (keep) {
-            inferenceArrays.set(_this.outTensor, keep(math.scaledArrayAdd(c1, x1, c2, x2)));
+        globals_1.tidy(function () {
+            inferenceArrays.set(_this.outTensor, globals_1.keep(math.scaledArrayAdd(c1, x1, c2, x2)));
         });
     };
     LinearCombination.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
@@ -3936,7 +7158,7 @@ var LinearCombination = (function (_super) {
         var c1 = inferenceArrays.get(this.c1Tensor);
         var c2 = inferenceArrays.get(this.c2Tensor);
         var dy = gradientArrays.get(this.outTensor);
-        math.scope(function () {
+        globals_1.tidy(function () {
             if (graph_util.shouldBackProp(_this.x1Tensor)) {
                 gradientArrays.add(_this.x1Tensor, math.scalarTimesArray(c1, dy));
             }
@@ -3957,7 +7179,7 @@ var LinearCombination = (function (_super) {
 }(op_1.Operation));
 exports.LinearCombination = LinearCombination;
 
-},{"../graph_util":17,"./op":33}],29:[function(require,module,exports){
+},{"../../globals":35,"../graph_util":41,"./op":58}],54:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -3970,6 +7192,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../../globals");
 var graph_util = require("../graph_util");
 var op_1 = require("./op");
 var Log = (function (_super) {
@@ -3983,15 +7206,15 @@ var Log = (function (_super) {
     Log.prototype.feedForward = function (math, inferenceArrays) {
         var _this = this;
         var x = inferenceArrays.get(this.xTensor);
-        math.scope(function (keep) {
-            inferenceArrays.set(_this.yTensor, keep(math.log(x)));
+        globals_1.tidy(function () {
+            inferenceArrays.set(_this.yTensor, globals_1.keep(math.log(x)));
         });
     };
     Log.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
         var _this = this;
         var x = inferenceArrays.get(this.xTensor);
         var dy = gradientArrays.get(this.yTensor);
-        math.scope(function () {
+        globals_1.tidy(function () {
             if (graph_util.shouldBackProp(_this.xTensor)) {
                 gradientArrays.add(_this.xTensor, math.divide(dy, x));
             }
@@ -4001,7 +7224,7 @@ var Log = (function (_super) {
 }(op_1.Operation));
 exports.Log = Log;
 
-},{"../graph_util":17,"./op":33}],30:[function(require,module,exports){
+},{"../../globals":35,"../graph_util":41,"./op":58}],55:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -4014,7 +7237,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-var matmul_1 = require("../../math/backends/types/matmul");
+var globals_1 = require("../../globals");
 var graph_util = require("../graph_util");
 var op_1 = require("./op");
 var MatMul = (function (_super) {
@@ -4030,15 +7253,15 @@ var MatMul = (function (_super) {
         var _this = this;
         var x1 = inferenceArrays.get(this.x1Tensor);
         var x2 = inferenceArrays.get(this.x2Tensor);
-        math.scope(function (keep) {
+        globals_1.tidy(function () {
             if (x1.shape.length === 2 && x2.shape.length === 2) {
-                inferenceArrays.set(_this.yTensor, keep(math.matMul(x1, x2)));
+                inferenceArrays.set(_this.yTensor, globals_1.keep(math.matMul(x1, x2)));
             }
             else if (x1.shape.length === 2 && x2.shape.length === 1) {
-                inferenceArrays.set(_this.yTensor, keep(math.matrixTimesVector(x1, x2)));
+                inferenceArrays.set(_this.yTensor, globals_1.keep(math.matrixTimesVector(x1, x2)));
             }
             else if (x1.shape.length === 1 && x2.shape.length === 2) {
-                inferenceArrays.set(_this.yTensor, keep(math.vectorTimesMatrix(x1, x2)));
+                inferenceArrays.set(_this.yTensor, globals_1.keep(math.vectorTimesMatrix(x1, x2)));
             }
         });
     };
@@ -4055,13 +7278,13 @@ var MatMul = (function (_super) {
             x2 = x2.reshape([x2.size, 1]);
             dy = dy.reshape([dy.size, 1]);
         }
-        math.scope(function () {
+        globals_1.tidy(function () {
             if (graph_util.shouldBackProp(_this.x1Tensor)) {
-                var dx1 = math.matMul(dy, x2, matmul_1.MatrixOrientation.REGULAR, matmul_1.MatrixOrientation.TRANSPOSED);
+                var dx1 = math.matMul(dy, x2, false, true);
                 gradientArrays.add(_this.x1Tensor, _this.x1Tensor.shape.length === 1 ? dx1.as1D() : dx1);
             }
             if (graph_util.shouldBackProp(_this.x2Tensor)) {
-                var dx2 = math.matMul(x1, dy, matmul_1.MatrixOrientation.TRANSPOSED, matmul_1.MatrixOrientation.REGULAR);
+                var dx2 = math.matMul(x1, dy, true, false);
                 gradientArrays.add(_this.x2Tensor, _this.x2Tensor.shape.length === 1 ? dx2.as1D() : dx2);
             }
         });
@@ -4070,7 +7293,7 @@ var MatMul = (function (_super) {
 }(op_1.Operation));
 exports.MatMul = MatMul;
 
-},{"../../math/backends/types/matmul":60,"../graph_util":17,"./op":33}],31:[function(require,module,exports){
+},{"../../globals":35,"../graph_util":41,"./op":58}],56:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -4083,7 +7306,8 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-var conv_util = require("../../math/conv_util");
+var globals_1 = require("../../globals");
+var conv_util = require("../../ops/conv_util");
 var util = require("../../util");
 var op_1 = require("./op");
 var MaxPool = (function (_super) {
@@ -4108,15 +7332,15 @@ var MaxPool = (function (_super) {
     MaxPool.prototype.feedForward = function (math, inferenceArrays) {
         var _this = this;
         var x = inferenceArrays.get(this.xTensor);
-        math.scope(function (keep) {
-            inferenceArrays.set(_this.yTensor, keep(math.maxPool(x, _this.fieldSize, _this.stride, _this.pad)));
+        globals_1.tidy(function () {
+            inferenceArrays.set(_this.yTensor, globals_1.keep(math.maxPool(x, _this.fieldSize, _this.stride, _this.pad)));
         });
     };
     MaxPool.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
         var _this = this;
         var x = inferenceArrays.get(this.xTensor);
         var dy = gradientArrays.get(this.yTensor);
-        math.scope(function () {
+        globals_1.tidy(function () {
             gradientArrays.add(_this.xTensor, math.maxPoolBackprop(dy, x, _this.fieldSize, _this.stride, _this.pad));
         });
     };
@@ -4124,7 +7348,7 @@ var MaxPool = (function (_super) {
 }(op_1.Operation));
 exports.MaxPool = MaxPool;
 
-},{"../../math/conv_util":91,"../../util":100,"./op":33}],32:[function(require,module,exports){
+},{"../../globals":35,"../../ops/conv_util":115,"../../util":151,"./op":58}],57:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -4137,6 +7361,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../../globals");
 var util = require("../../util");
 var graph_util = require("../graph_util");
 var op_1 = require("./op");
@@ -4157,7 +7382,7 @@ var Multiply = (function (_super) {
         var _this = this;
         var t1 = inferenceArrays.get(this.x1Tensor);
         var t2 = inferenceArrays.get(this.x2Tensor);
-        math.scope(function (keep) {
+        globals_1.tidy(function () {
             var result;
             if (util.isScalarShape(t1.shape)) {
                 result = math.scalarTimesArray(t1, t2);
@@ -4168,7 +7393,7 @@ var Multiply = (function (_super) {
             else {
                 result = math.elementWiseMul(t1, t2);
             }
-            inferenceArrays.set(_this.yTensor, keep(result));
+            inferenceArrays.set(_this.yTensor, globals_1.keep(result));
         });
     };
     Multiply.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
@@ -4176,7 +7401,7 @@ var Multiply = (function (_super) {
         var x1 = inferenceArrays.get(this.x1Tensor);
         var x2 = inferenceArrays.get(this.x2Tensor);
         var dy = gradientArrays.get(this.yTensor);
-        math.scope(function () {
+        globals_1.tidy(function () {
             if (graph_util.shouldBackProp(_this.x1Tensor)) {
                 if (util.isScalarShape(_this.x1Tensor.shape)) {
                     var mul = math.elementWiseMul(dy, x2);
@@ -4207,7 +7432,7 @@ var Multiply = (function (_super) {
 }(op_1.Operation));
 exports.Multiply = Multiply;
 
-},{"../../util":100,"../graph_util":17,"./op":33}],33:[function(require,module,exports){
+},{"../../globals":35,"../../util":151,"../graph_util":41,"./op":58}],58:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var Operation = (function () {
@@ -4219,7 +7444,7 @@ var Operation = (function () {
 }());
 exports.Operation = Operation;
 
-},{}],34:[function(require,module,exports){
+},{}],59:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -4233,7 +7458,8 @@ var __extends = (this && this.__extends) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 var environment_1 = require("../../environment");
-var ndarray_1 = require("../../math/ndarray");
+var globals_1 = require("../../globals");
+var tensor_1 = require("../../tensor");
 var util = require("../../util");
 var graph_util = require("../graph_util");
 var op_1 = require("./op");
@@ -4244,14 +7470,14 @@ var ReduceSum = (function (_super) {
         _this.x = x;
         _this.outTensor = outTensor;
         util.assertShapesMatch(outTensor.shape, []);
-        _this.ones = environment_1.ENV.math.keep(ndarray_1.NDArray.ones(x.shape));
+        _this.ones = environment_1.ENV.math.keep(tensor_1.Tensor.ones(x.shape));
         return _this;
     }
     ReduceSum.prototype.feedForward = function (math, inferenceArrays) {
         var _this = this;
         var x = inferenceArrays.get(this.x);
-        math.scope(function (keep) {
-            inferenceArrays.set(_this.outTensor, keep(math.sum(x)));
+        globals_1.tidy(function () {
+            inferenceArrays.set(_this.outTensor, globals_1.keep(math.sum(x)));
         });
     };
     ReduceSum.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
@@ -4259,7 +7485,7 @@ var ReduceSum = (function (_super) {
         if (!graph_util.shouldBackProp(this.x)) {
             return;
         }
-        math.scope(function () {
+        globals_1.tidy(function () {
             var dy = gradientArrays.get(_this.outTensor);
             gradientArrays.add(_this.x, math.scalarTimesArray(dy, _this.ones));
         });
@@ -4271,7 +7497,7 @@ var ReduceSum = (function (_super) {
 }(op_1.Operation));
 exports.ReduceSum = ReduceSum;
 
-},{"../../environment":15,"../../math/ndarray":94,"../../util":100,"../graph_util":17,"./op":33}],35:[function(require,module,exports){
+},{"../../environment":34,"../../globals":35,"../../tensor":146,"../../util":151,"../graph_util":41,"./op":58}],60:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -4284,6 +7510,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../../globals");
 var util = require("../../util");
 var op_1 = require("./op");
 var Reshape = (function (_super) {
@@ -4301,15 +7528,15 @@ var Reshape = (function (_super) {
         var _this = this;
         var x = inferenceArrays.get(this.xTensor);
         var clone = math.clone(x);
-        math.scope(function (keep) {
-            inferenceArrays.set(_this.yTensor, keep(clone.reshape(_this.yTensor.shape)));
+        globals_1.tidy(function () {
+            inferenceArrays.set(_this.yTensor, globals_1.keep(clone.reshape(_this.yTensor.shape)));
         });
     };
     Reshape.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
         var _this = this;
         var dy = gradientArrays.get(this.yTensor);
         var clone = math.clone(dy);
-        math.scope(function () {
+        globals_1.tidy(function () {
             gradientArrays.add(_this.xTensor, clone.reshape(_this.xTensor.shape));
         });
     };
@@ -4317,7 +7544,7 @@ var Reshape = (function (_super) {
 }(op_1.Operation));
 exports.Reshape = Reshape;
 
-},{"../../util":100,"./op":33}],36:[function(require,module,exports){
+},{"../../globals":35,"../../util":151,"./op":58}],61:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -4331,7 +7558,8 @@ var __extends = (this && this.__extends) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 var environment_1 = require("../../environment");
-var ndarray_1 = require("../../math/ndarray");
+var globals_1 = require("../../globals");
+var tensor_1 = require("../../tensor");
 var util = require("../../util");
 var graph_1 = require("../graph");
 var graph_util = require("../graph_util");
@@ -4347,15 +7575,15 @@ var Softmax = (function (_super) {
     Softmax.prototype.feedForward = function (math, inferenceArrays) {
         var _this = this;
         var logits = inferenceArrays.get(this.logitsTensor);
-        return math.scope(function (keep) {
-            inferenceArrays.set(_this.output, keep(math.softmax(logits)));
+        return globals_1.tidy(function () {
+            inferenceArrays.set(_this.output, globals_1.keep(math.softmax(logits)));
         });
     };
     Softmax.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
         var _this = this;
         var y = inferenceArrays.get(this.output);
         var dy = gradientArrays.get(this.output);
-        math.scope(function () {
+        globals_1.tidy(function () {
             if (graph_util.shouldBackProp(_this.logitsTensor)) {
                 var dlogits = math.elementWiseMul(math.subtract(dy, math.sum(math.elementWiseMul(dy, y))), y);
                 gradientArrays.add(_this.logitsTensor, dlogits);
@@ -4372,25 +7600,25 @@ var SoftmaxCrossEntropyCost = (function (_super) {
         _this.logitsTensor = logitsTensor;
         _this.labelTensor = labelTensor;
         _this.yTensor = yTensor;
-        _this.softmaxTensor = new graph_1.Tensor(logitsTensor.shape);
-        _this.epsilon = environment_1.ENV.math.keep(ndarray_1.Scalar.new(1e-5));
+        _this.softmaxTensor = new graph_1.SymbolicTensor(logitsTensor.shape);
+        _this.epsilon = environment_1.ENV.math.keep(tensor_1.Scalar.new(1e-5));
         return _this;
     }
     SoftmaxCrossEntropyCost.prototype.feedForward = function (math, inferenceArrays) {
         var _this = this;
         var logits = inferenceArrays.get(this.logitsTensor);
         var label = inferenceArrays.get(this.labelTensor);
-        math.scope(function (keep) {
+        globals_1.tidy(function () {
             var softmaxResult = math.softmax(logits);
-            inferenceArrays.set(_this.softmaxTensor, keep(softmaxResult));
-            inferenceArrays.set(_this.yTensor, keep(crossEntropyCost(math, softmaxResult, label, _this.epsilon)));
+            inferenceArrays.set(_this.softmaxTensor, globals_1.keep(softmaxResult));
+            inferenceArrays.set(_this.yTensor, globals_1.keep(crossEntropyCost(math, softmaxResult, label, _this.epsilon)));
         });
     };
     SoftmaxCrossEntropyCost.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
         var _this = this;
         var softmax = inferenceArrays.get(this.softmaxTensor);
         var label = inferenceArrays.get(this.labelTensor);
-        math.scope(function () {
+        globals_1.tidy(function () {
             gradientArrays.add(_this.logitsTensor, math.subtract(softmax, label));
         });
     };
@@ -4405,7 +7633,7 @@ var SoftmaxCrossEntropyCost = (function (_super) {
 exports.SoftmaxCrossEntropyCost = SoftmaxCrossEntropyCost;
 function crossEntropyCost(math, y, target, epsilon) {
     util.assert(y.size === target.size, 'The output and target must be the same size');
-    return math.scope(function () {
+    return globals_1.tidy(function () {
         var yPlusEps = math.scalarPlusArray(epsilon, y);
         var logOutput = math.log(yPlusEps);
         var tarLogOutput = math.elementWiseMul(target, logOutput);
@@ -4415,7 +7643,7 @@ function crossEntropyCost(math, y, target, epsilon) {
 }
 exports.crossEntropyCost = crossEntropyCost;
 
-},{"../../environment":15,"../../math/ndarray":94,"../../util":100,"../graph":16,"../graph_util":17,"./op":33}],37:[function(require,module,exports){
+},{"../../environment":34,"../../globals":35,"../../tensor":146,"../../util":151,"../graph":39,"../graph_util":41,"./op":58}],62:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -4428,6 +7656,7 @@ var __extends = (this && this.__extends) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../../globals");
 var util = require("../../util");
 var graph_util = require("../graph_util");
 var op_1 = require("./op");
@@ -4448,7 +7677,7 @@ var Subtract = (function (_super) {
         var _this = this;
         var t1 = inferenceArrays.get(this.t1);
         var t2 = inferenceArrays.get(this.t2);
-        math.scope(function (keep) {
+        globals_1.tidy(function () {
             var result;
             if (util.isScalarShape(t1.shape)) {
                 result = math.scalarMinusArray(t1, t2);
@@ -4459,13 +7688,13 @@ var Subtract = (function (_super) {
             else {
                 result = math.subtract(t1, t2);
             }
-            inferenceArrays.set(_this.outTensor, keep(result));
+            inferenceArrays.set(_this.outTensor, globals_1.keep(result));
         });
     };
     Subtract.prototype.backProp = function (math, inferenceArrays, gradientArrays) {
         var _this = this;
         var dy = gradientArrays.get(this.outTensor);
-        math.scope(function () {
+        globals_1.tidy(function () {
             if (graph_util.shouldBackProp(_this.t1)) {
                 if (util.isScalarShape(_this.t1.shape)) {
                     var sum = math.sum(dy);
@@ -4496,561 +7725,7 @@ var Subtract = (function (_super) {
 }(op_1.Operation));
 exports.Subtract = Subtract;
 
-},{"../../util":100,"../graph_util":17,"./op":33}],38:[function(require,module,exports){
-"use strict";
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../../math/ndarray");
-var tensor_array_map_1 = require("../tensor_array_map");
-var optimizer_1 = require("./optimizer");
-var AdadeltaOptimizer = (function (_super) {
-    __extends(AdadeltaOptimizer, _super);
-    function AdadeltaOptimizer(learningRate, gamma, specifiedVariableList) {
-        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
-        _this.learningRate = learningRate;
-        _this.gamma = gamma;
-        _this.accumulatedSquaredGradients = new tensor_array_map_1.TensorArrayMap();
-        _this.accumulatedUpdates = new tensor_array_map_1.TensorArrayMap();
-        _this.eps = ndarray_1.Scalar.new(1e-6);
-        _this.g = ndarray_1.Scalar.new(_this.gamma);
-        return _this;
-    }
-    AdadeltaOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        _super.prototype.beforeBatch.call(this, math, batchSize, runtime, activationArrayMap, gradientArrayMap);
-        if (this.accumulatedSquaredGradients.size() === 0) {
-            this.variableNodes.forEach(function (node) {
-                _this.accumulatedSquaredGradients.set(node.output, ndarray_1.NDArray.zeros(node.output.shape));
-                _this.accumulatedUpdates.set(node.output, ndarray_1.NDArray.zeros(node.output.shape));
-            });
-        }
-    };
-    AdadeltaOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        math.scope(function (keep) {
-            _this.variableNodes.forEach(function (node) {
-                var oldVariable = activationArrayMap.get(node.output);
-                var gradient = _this.variableGradients.get(node.output);
-                var oldCache = _this.accumulatedSquaredGradients.get(node.output);
-                var oldUpdates = _this.accumulatedUpdates.get(node.output);
-                var gradientSquare = math.multiply(gradient, gradient);
-                var cache = math.scaledArrayAdd(_this.g, oldCache, math.subtract(_this.one, _this.g), gradientSquare);
-                var updates = math.multiply(math.divide(math.sqrt(math.add(oldUpdates, _this.eps)), math.sqrt(math.add(oldCache, _this.eps))), gradient);
-                var variable = math.scaledArrayAdd(_this.c, updates, _this.one, oldVariable);
-                var updateSquare = math.multiply(updates, updates);
-                var newUpdates = math.scaledArrayAdd(_this.g, oldUpdates, math.subtract(_this.one, _this.g), updateSquare);
-                _this.accumulatedSquaredGradients.set(node.output, keep(cache));
-                _this.accumulatedUpdates.set(node.output, keep(newUpdates));
-                activationArrayMap.set(node.output, keep(variable));
-                node.data = variable;
-                oldVariable.dispose();
-                oldCache.dispose();
-                oldUpdates.dispose();
-            });
-        });
-        this.variableGradients.dispose();
-        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
-    };
-    AdadeltaOptimizer.prototype.dispose = function () {
-        _super.prototype.dispose.call(this);
-        this.eps.dispose();
-        this.g.dispose();
-        this.accumulatedSquaredGradients.dispose();
-        this.accumulatedUpdates.dispose();
-    };
-    return AdadeltaOptimizer;
-}(optimizer_1.Optimizer));
-exports.AdadeltaOptimizer = AdadeltaOptimizer;
-
-},{"../../math/ndarray":94,"../tensor_array_map":49,"./optimizer":43}],39:[function(require,module,exports){
-"use strict";
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../../math/ndarray");
-var tensor_array_map_1 = require("../tensor_array_map");
-var optimizer_1 = require("./optimizer");
-var AdagradOptimizer = (function (_super) {
-    __extends(AdagradOptimizer, _super);
-    function AdagradOptimizer(learningRate, specifiedVariableList) {
-        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
-        _this.learningRate = learningRate;
-        _this.accumulatedSquaredGradients = new tensor_array_map_1.TensorArrayMap();
-        _this.eps = ndarray_1.Scalar.new(1e-6);
-        return _this;
-    }
-    AdagradOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        _super.prototype.beforeBatch.call(this, math, batchSize, runtime, activationArrayMap, gradientArrayMap);
-        if (this.accumulatedSquaredGradients.size() === 0) {
-            this.variableNodes.forEach(function (node) {
-                _this.accumulatedSquaredGradients.set(node.output, ndarray_1.NDArray.zeros(node.output.shape));
-            });
-        }
-    };
-    AdagradOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        math.scope(function (keep) {
-            _this.variableNodes.forEach(function (node) {
-                var oldVariable = activationArrayMap.get(node.output);
-                var gradient = _this.variableGradients.get(node.output);
-                var oldCache = _this.accumulatedSquaredGradients.get(node.output);
-                var gradientSquare = math.multiply(gradient, gradient);
-                var cache = math.add(oldCache, gradientSquare);
-                var variable = math.scaledArrayAdd(_this.c, math.divide(gradient, math.add(math.sqrt(cache), _this.eps)), _this.one, oldVariable);
-                _this.accumulatedSquaredGradients.set(node.output, keep(cache));
-                activationArrayMap.set(node.output, keep(variable));
-                node.data = variable;
-                oldVariable.dispose();
-                oldCache.dispose();
-            });
-        });
-        this.variableGradients.dispose();
-        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
-    };
-    AdagradOptimizer.prototype.dispose = function () {
-        _super.prototype.dispose.call(this);
-        this.eps.dispose();
-        this.accumulatedSquaredGradients.dispose();
-    };
-    return AdagradOptimizer;
-}(optimizer_1.Optimizer));
-exports.AdagradOptimizer = AdagradOptimizer;
-
-},{"../../math/ndarray":94,"../tensor_array_map":49,"./optimizer":43}],40:[function(require,module,exports){
-"use strict";
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../../math/ndarray");
-var tensor_array_map_1 = require("../tensor_array_map");
-var optimizer_1 = require("./optimizer");
-var AdamOptimizer = (function (_super) {
-    __extends(AdamOptimizer, _super);
-    function AdamOptimizer(learningRate, beta1, beta2, specifiedVariableList) {
-        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
-        _this.learningRate = learningRate;
-        _this.beta1 = beta1;
-        _this.beta2 = beta2;
-        _this.firstMoment = new tensor_array_map_1.TensorArrayMap();
-        _this.secondMoment = new tensor_array_map_1.TensorArrayMap();
-        _this.eps = ndarray_1.Scalar.new(1e-8);
-        _this.b1 = ndarray_1.Scalar.new(_this.beta1);
-        _this.b2 = ndarray_1.Scalar.new(_this.beta2);
-        _this.accB1 = ndarray_1.Scalar.new(_this.beta1);
-        _this.accB2 = ndarray_1.Scalar.new(_this.beta2);
-        return _this;
-    }
-    AdamOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        _super.prototype.beforeBatch.call(this, math, batchSize, runtime, activationArrayMap, gradientArrayMap);
-        if (this.firstMoment.size() === 0) {
-            this.variableNodes.forEach(function (node) {
-                _this.firstMoment.set(node.output, ndarray_1.NDArray.zeros(node.output.shape));
-            });
-        }
-        if (this.secondMoment.size() === 0) {
-            this.variableNodes.forEach(function (node) {
-                _this.secondMoment.set(node.output, ndarray_1.NDArray.zeros(node.output.shape));
-            });
-        }
-    };
-    AdamOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        math.scope(function (keep) {
-            _this.variableNodes.forEach(function (node) {
-                var oldVariable = activationArrayMap.get(node.output);
-                var gradient = _this.variableGradients.get(node.output);
-                var oldFirstMoment = _this.firstMoment.get(node.output);
-                var oldSecondMoment = _this.secondMoment.get(node.output);
-                var newFirstMoment = math.scaledArrayAdd(_this.b1, oldFirstMoment, math.subtract(_this.one, _this.b1), gradient);
-                var gradientSquare = math.multiply(gradient, gradient);
-                var newSecondMoment = math.scaledArrayAdd(_this.b2, oldSecondMoment, math.subtract(_this.one, _this.b2), gradientSquare);
-                var biasCorrectedFirstMoment = math.divide(newFirstMoment, math.subtract(_this.one, _this.accB1));
-                var biasCorrectedSecondMoment = math.divide(newSecondMoment, math.subtract(_this.one, _this.accB2));
-                var variable = math.scaledArrayAdd(_this.c, math.divide(biasCorrectedFirstMoment, math.add(math.sqrt(biasCorrectedSecondMoment), _this.eps)), _this.one, oldVariable);
-                activationArrayMap.set(node.output, keep(variable));
-                node.data = variable;
-                _this.firstMoment.set(node.output, keep(newFirstMoment));
-                _this.secondMoment.set(node.output, keep(newSecondMoment));
-                oldVariable.dispose();
-                gradient.dispose();
-                oldFirstMoment.dispose();
-                oldSecondMoment.dispose();
-            });
-            var oldAccB1 = _this.accB1;
-            var oldAccB2 = _this.accB2;
-            _this.accB1 = keep(math.multiply(_this.accB1, _this.b1));
-            _this.accB2 = keep(math.multiply(_this.accB2, _this.b2));
-            oldAccB1.dispose();
-            oldAccB2.dispose();
-        });
-        this.variableGradients.dispose();
-        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
-    };
-    AdamOptimizer.prototype.dispose = function () {
-        _super.prototype.dispose.call(this);
-        this.firstMoment.dispose();
-        this.secondMoment.dispose();
-        this.eps.dispose();
-        this.b1.dispose();
-        this.b2.dispose();
-        this.accB1.dispose();
-        this.accB2.dispose();
-    };
-    return AdamOptimizer;
-}(optimizer_1.Optimizer));
-exports.AdamOptimizer = AdamOptimizer;
-
-},{"../../math/ndarray":94,"../tensor_array_map":49,"./optimizer":43}],41:[function(require,module,exports){
-"use strict";
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../../math/ndarray");
-var tensor_array_map_1 = require("../tensor_array_map");
-var optimizer_1 = require("./optimizer");
-var AdamaxOptimizer = (function (_super) {
-    __extends(AdamaxOptimizer, _super);
-    function AdamaxOptimizer(learningRate, beta1, beta2, specifiedVariableList) {
-        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
-        _this.learningRate = learningRate;
-        _this.beta1 = beta1;
-        _this.beta2 = beta2;
-        _this.firstMoment = new tensor_array_map_1.TensorArrayMap();
-        _this.weightedInfNorm = new tensor_array_map_1.TensorArrayMap();
-        _this.eps = ndarray_1.Scalar.new(1e-8);
-        _this.b1 = ndarray_1.Scalar.new(_this.beta1);
-        _this.b2 = ndarray_1.Scalar.new(_this.beta2);
-        _this.accB1 = ndarray_1.Scalar.new(_this.beta1);
-        return _this;
-    }
-    AdamaxOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        _super.prototype.beforeBatch.call(this, math, batchSize, runtime, activationArrayMap, gradientArrayMap);
-        if (this.firstMoment.size() === 0) {
-            this.variableNodes.forEach(function (node) {
-                _this.firstMoment.set(node.output, ndarray_1.NDArray.zeros(node.output.shape));
-            });
-        }
-        if (this.weightedInfNorm.size() === 0) {
-            this.variableNodes.forEach(function (node) {
-                _this.weightedInfNorm.set(node.output, ndarray_1.NDArray.zeros(node.output.shape));
-            });
-        }
-    };
-    AdamaxOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        math.scope(function (keep) {
-            _this.variableNodes.forEach(function (node) {
-                var oldVariable = activationArrayMap.get(node.output);
-                var gradient = _this.variableGradients.get(node.output);
-                var oldFirstMoment = _this.firstMoment.get(node.output);
-                var oldWeightedInfNorm = _this.weightedInfNorm.get(node.output);
-                var newFirstMoment = math.scaledArrayAdd(_this.b1, oldFirstMoment, math.subtract(_this.one, _this.b1), gradient);
-                var ut0 = math.multiply(_this.b2, oldWeightedInfNorm);
-                var ut1 = math.abs(gradient);
-                var newWeightedInfNorm = math.add(math.relu(math.subtract(ut0, ut1)), ut1);
-                var variable = math.scaledArrayAdd(_this.one, oldVariable, math.divideStrict(_this.c, math.subtract(_this.one, _this.accB1)), math.divide(newFirstMoment, math.add(_this.eps, newWeightedInfNorm)));
-                activationArrayMap.set(node.output, keep(variable));
-                node.data = variable;
-                _this.firstMoment.set(node.output, keep(newFirstMoment));
-                _this.weightedInfNorm.set(node.output, keep(newWeightedInfNorm));
-                oldVariable.dispose();
-                gradient.dispose();
-                oldFirstMoment.dispose();
-                oldWeightedInfNorm.dispose();
-            });
-            var oldAccB1 = _this.accB1;
-            _this.accB1 = keep(math.multiply(_this.accB1, _this.b1));
-            oldAccB1.dispose();
-        });
-        this.variableGradients.dispose();
-        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
-    };
-    AdamaxOptimizer.prototype.dispose = function () {
-        _super.prototype.dispose.call(this);
-        this.firstMoment.dispose();
-        this.weightedInfNorm.dispose();
-        this.eps.dispose();
-        this.accB1.dispose();
-        this.b1.dispose();
-        this.b2.dispose();
-    };
-    return AdamaxOptimizer;
-}(optimizer_1.Optimizer));
-exports.AdamaxOptimizer = AdamaxOptimizer;
-
-},{"../../math/ndarray":94,"../tensor_array_map":49,"./optimizer":43}],42:[function(require,module,exports){
-"use strict";
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../../math/ndarray");
-var tensor_array_map_1 = require("../tensor_array_map");
-var sgd_optimizer_1 = require("./sgd_optimizer");
-var MomentumOptimizer = (function (_super) {
-    __extends(MomentumOptimizer, _super);
-    function MomentumOptimizer(learningRate, momentum, specifiedVariableList) {
-        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
-        _this.learningRate = learningRate;
-        _this.momentum = momentum;
-        _this.variableVelocities = new tensor_array_map_1.TensorArrayMap();
-        _this.m = ndarray_1.Scalar.new(_this.momentum);
-        return _this;
-    }
-    MomentumOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        _super.prototype.beforeBatch.call(this, math, batchSize, runtime, activationArrayMap, gradientArrayMap);
-        if (this.variableVelocities.size() === 0) {
-            this.variableNodes.forEach(function (node) {
-                _this.variableVelocities.set(node.output, ndarray_1.NDArray.zeros(node.output.shape));
-            });
-        }
-    };
-    MomentumOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        math.scope(function (keep) {
-            _this.variableNodes.forEach(function (node) {
-                var oldVariable = activationArrayMap.get(node.output);
-                var gradient = _this.variableGradients.get(node.output);
-                var oldVelocity = _this.variableVelocities.get(node.output);
-                var velocity = math.scaledArrayAdd(_this.m, oldVelocity, _this.one, gradient);
-                var variable = math.scaledArrayAdd(_this.c, velocity, _this.one, oldVariable);
-                _this.variableVelocities.set(node.output, keep(velocity));
-                activationArrayMap.set(node.output, keep(variable));
-                node.data = variable;
-                oldVariable.dispose();
-                oldVelocity.dispose();
-            });
-        });
-        this.variableGradients.dispose();
-        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
-    };
-    MomentumOptimizer.prototype.dispose = function () {
-        _super.prototype.dispose.call(this);
-        this.m.dispose();
-        this.variableVelocities.dispose();
-    };
-    MomentumOptimizer.prototype.setMomentum = function (momentum) {
-        this.momentum = momentum;
-    };
-    return MomentumOptimizer;
-}(sgd_optimizer_1.SGDOptimizer));
-exports.MomentumOptimizer = MomentumOptimizer;
-
-},{"../../math/ndarray":94,"../tensor_array_map":49,"./sgd_optimizer":45}],43:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var environment_1 = require("../../environment");
-var ndarray_1 = require("../../math/ndarray");
-var session_util = require("../session_util");
-var tensor_array_map_1 = require("../tensor_array_map");
-var Optimizer = (function () {
-    function Optimizer(learningRate, specifiedVariableList) {
-        this.learningRate = learningRate;
-        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
-        if (specifiedVariableList != null) {
-            this.specifiedVariableNodes = specifiedVariableList;
-        }
-        this.one = environment_1.ENV.math.keep(ndarray_1.Scalar.new(1));
-    }
-    Optimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        this.variableNodes = this.specifiedVariableNodes == null ?
-            session_util.getVariableNodesFromEvaluationSet(runtime.nodes) :
-            this.specifiedVariableNodes;
-        if (batchSize !== this.prevBatchSize) {
-            if (this.c != null) {
-                this.c.dispose();
-            }
-            this.prevBatchSize = batchSize;
-            this.c = math.keep(ndarray_1.Scalar.new(-this.learningRate / batchSize));
-        }
-        this.variableNodes.forEach(function (node) { return _this.variableGradients.set(node.output, math.keep(ndarray_1.NDArray.zeros(node.output.shape))); });
-    };
-    Optimizer.prototype.afterExample = function (math, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        math.scope(function (keep) {
-            _this.variableNodes.forEach(function (node) {
-                var gradient = gradientArrayMap.get(node.output);
-                var accumulatedGradient = _this.variableGradients.get(node.output);
-                _this.variableGradients.set(node.output, keep(math.add(gradient, accumulatedGradient)));
-                accumulatedGradient.dispose();
-            });
-        });
-    };
-    Optimizer.prototype.dispose = function () {
-        if (this.c != null) {
-            this.c.dispose();
-        }
-        this.one.dispose();
-        this.variableNodes.forEach(function (node) {
-            node.data.dispose();
-        });
-        this.specifiedVariableNodes.forEach(function (node) {
-            node.data.dispose();
-        });
-    };
-    return Optimizer;
-}());
-exports.Optimizer = Optimizer;
-
-},{"../../environment":15,"../../math/ndarray":94,"../session_util":48,"../tensor_array_map":49}],44:[function(require,module,exports){
-"use strict";
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../../math/ndarray");
-var tensor_array_map_1 = require("../tensor_array_map");
-var optimizer_1 = require("./optimizer");
-var RMSPropOptimizer = (function (_super) {
-    __extends(RMSPropOptimizer, _super);
-    function RMSPropOptimizer(learningRate, gamma, specifiedVariableList) {
-        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
-        _this.learningRate = learningRate;
-        _this.gamma = gamma;
-        _this.accumulatedSquaredGradients = new tensor_array_map_1.TensorArrayMap();
-        _this.eps = ndarray_1.Scalar.new(1e-6);
-        _this.g = ndarray_1.Scalar.new(_this.gamma);
-        return _this;
-    }
-    RMSPropOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        _super.prototype.beforeBatch.call(this, math, batchSize, runtime, activationArrayMap, gradientArrayMap);
-        if (this.accumulatedSquaredGradients.size() === 0) {
-            this.variableNodes.forEach(function (node) {
-                _this.accumulatedSquaredGradients.set(node.output, ndarray_1.NDArray.zeros(node.output.shape));
-            });
-        }
-    };
-    RMSPropOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        math.scope(function (keep) {
-            _this.variableNodes.forEach(function (node) {
-                var oldVariable = activationArrayMap.get(node.output);
-                var gradient = _this.variableGradients.get(node.output);
-                var oldCache = _this.accumulatedSquaredGradients.get(node.output);
-                var gradientSquare = math.multiply(gradient, gradient);
-                var cache = math.scaledArrayAdd(_this.g, oldCache, math.subtract(_this.one, _this.g), gradientSquare);
-                var variable = math.scaledArrayAdd(_this.c, math.divide(gradient, math.add(math.sqrt(cache), _this.eps)), _this.one, oldVariable);
-                _this.accumulatedSquaredGradients.set(node.output, keep(cache));
-                activationArrayMap.set(node.output, keep(variable));
-                node.data = variable;
-                oldVariable.dispose();
-                oldCache.dispose();
-            });
-        });
-        this.variableGradients.dispose();
-        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
-    };
-    RMSPropOptimizer.prototype.dispose = function () {
-        _super.prototype.dispose.call(this);
-        this.eps.dispose();
-        this.g.dispose();
-        this.accumulatedSquaredGradients.dispose();
-    };
-    return RMSPropOptimizer;
-}(optimizer_1.Optimizer));
-exports.RMSPropOptimizer = RMSPropOptimizer;
-
-},{"../../math/ndarray":94,"../tensor_array_map":49,"./optimizer":43}],45:[function(require,module,exports){
-"use strict";
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-var tensor_array_map_1 = require("../tensor_array_map");
-var optimizer_1 = require("./optimizer");
-var SGDOptimizer = (function (_super) {
-    __extends(SGDOptimizer, _super);
-    function SGDOptimizer(learningRate, specifiedVariableList) {
-        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
-        _this.learningRate = learningRate;
-        return _this;
-    }
-    SGDOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
-        var _this = this;
-        math.scope(function (keep) {
-            _this.variableNodes.forEach(function (node) {
-                var oldVariable = activationArrayMap.get(node.output);
-                var gradient = _this.variableGradients.get(node.output);
-                var variable = math.scaledArrayAdd(_this.c, gradient, _this.one, oldVariable);
-                activationArrayMap.set(node.output, keep(variable));
-                node.data = variable;
-                oldVariable.dispose();
-            });
-        });
-        this.variableGradients.dispose();
-        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
-    };
-    SGDOptimizer.prototype.dispose = function () {
-        _super.prototype.dispose.call(this);
-    };
-    SGDOptimizer.prototype.setLearningRate = function (learningRate) {
-        this.learningRate = learningRate;
-    };
-    return SGDOptimizer;
-}(optimizer_1.Optimizer));
-exports.SGDOptimizer = SGDOptimizer;
-
-},{"../tensor_array_map":49,"./optimizer":43}],46:[function(require,module,exports){
+},{"../../globals":35,"../../util":151,"../graph_util":41,"./op":58}],63:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 function defaultCompare(a, b) {
@@ -5181,10 +7856,11 @@ var PriorityQueue = (function () {
 }());
 exports.PriorityQueue = PriorityQueue;
 
-},{}],47:[function(require,module,exports){
+},{}],64:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../math/ndarray");
+var globals_1 = require("../globals");
+var tensor_1 = require("../tensor");
 var util = require("../util");
 var operation_emitter = require("./operation_emitter");
 var session_util = require("./session_util");
@@ -5211,7 +7887,7 @@ var Session = (function () {
         this.math = math;
         this.activationArrayMap = new tensor_array_map_1.TensorArrayMap();
         this.runtimeCache = {};
-        this.oneScalar = ndarray_1.Scalar.new(1);
+        this.oneScalar = tensor_1.Scalar.new(1);
         this.gradientArrayMap = new tensor_array_map_1.SummedTensorArrayMap(this.math);
     }
     Session.prototype.dispose = function () {
@@ -5231,7 +7907,7 @@ var Session = (function () {
     };
     Session.prototype.evalAll = function (tensors, feedEntries) {
         var _this = this;
-        return this.math.scope(function () {
+        return globals_1.tidy(function () {
             var feed = new FeedDictionary(feedEntries);
             var runtime = _this.getOrCreateRuntime(tensors, feed);
             var activations = _this.activationArrayMap;
@@ -5258,7 +7934,7 @@ var Session = (function () {
             if (this.batchSizeScalar != null) {
                 this.batchSizeScalar.dispose();
             }
-            this.batchSizeScalar = this.math.keep(ndarray_1.Scalar.new(batchSize));
+            this.batchSizeScalar = this.math.keep(tensor_1.Scalar.new(batchSize));
         }
         var feed = new FeedDictionary(feedEntries);
         session_util.throwIfFeedDictionaryContainsNDArrays(feed);
@@ -5271,8 +7947,8 @@ var Session = (function () {
         gradients.add(costTensor, this.oneScalar);
         session_util.addPersistentArraysToTensorArrayMap(runtime.nodes, activations);
         optimizer.beforeBatch(this.math, batchSize, runtime, activations, gradients);
-        return this.math.scope(function () {
-            var cost = ndarray_1.Scalar.new(0);
+        return globals_1.tidy(function () {
+            var cost = tensor_1.Scalar.new(0);
             for (var i = 0; i < batchSize; ++i) {
                 session_util.disposeAndInitializeOperationOutputs(runtime.nodes, activations);
                 session_util.disposeAndInitializeOperationInputGradients(runtime.nodes, gradients);
@@ -5322,10 +7998,10 @@ var Session = (function () {
 }());
 exports.Session = Session;
 
-},{"../math/ndarray":94,"../util":100,"./operation_emitter":18,"./session_util":48,"./tensor_array_map":49}],48:[function(require,module,exports){
+},{"../globals":35,"../tensor":146,"../util":151,"./operation_emitter":43,"./session_util":65,"./tensor_array_map":66}],65:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("../math/ndarray");
+var tensor_1 = require("../tensor");
 var util = require("../util");
 var graph_1 = require("./graph");
 var graph_util = require("./graph_util");
@@ -5362,7 +8038,7 @@ function getVariableNodesFromEvaluationSet(evaluationSet) {
 exports.getVariableNodesFromEvaluationSet = getVariableNodesFromEvaluationSet;
 function throwIfFeedDictionaryContainsNDArrays(feedDictionary) {
     Object.keys(feedDictionary.dict).forEach(function (tensorID) {
-        if (feedDictionary.dict[+tensorID].data instanceof ndarray_1.NDArray) {
+        if (feedDictionary.dict[+tensorID].data instanceof tensor_1.Tensor) {
             throw new Error('training requires FeedDictionary entries to be InputProviders' +
                 'and not NDArrays.');
         }
@@ -5373,12 +8049,12 @@ function loadInputsFromFeedDictionaryToTensorArrayMap(batchFeed, activations, ma
     Object.keys(batchFeed.dict).forEach(function (tensorID) {
         var feedEntry = batchFeed.dict[+tensorID];
         var data;
-        if (feedEntry.data instanceof ndarray_1.NDArray) {
+        if (feedEntry.data instanceof tensor_1.Tensor) {
             data = feedEntry.data;
         }
         else {
             var provider = feedEntry.data;
-            data = provider.getNextCopy(math);
+            data = provider.getNextCopy();
         }
         util.assert(util.arraysEqual(feedEntry.tensor.shape, data.shape), "Error loading FeedEntry: feeding NDArray of shape " + data.shape + " " +
             ("does not match Tensor (id: " + feedEntry.tensor.id + ") shape: ") +
@@ -5390,10 +8066,10 @@ exports.loadInputsFromFeedDictionaryToTensorArrayMap = loadInputsFromFeedDiction
 function releaseFeedDictionaryInputsFromTensorArrayMap(batchFeed, activations, math) {
     Object.keys(batchFeed.dict).forEach(function (tensorID) {
         var feedEntry = batchFeed.dict[+tensorID];
-        if (!(feedEntry.data instanceof ndarray_1.NDArray)) {
+        if (!(feedEntry.data instanceof tensor_1.Tensor)) {
             var provider = feedEntry.data;
             var feedEntryArray = activations.get(feedEntry.tensor);
-            provider.disposeCopy(math, feedEntryArray);
+            provider.disposeCopy(feedEntryArray);
         }
         activations.delete(feedEntry.tensor);
     });
@@ -5450,7 +8126,7 @@ function throwErrorIfEvaluationSetContainsPlaceholderNodes(evaluationSet) {
 }
 exports.throwErrorIfEvaluationSetContainsPlaceholderNodes = throwErrorIfEvaluationSetContainsPlaceholderNodes;
 
-},{"../math/ndarray":94,"../util":100,"./graph":16,"./graph_util":17}],49:[function(require,module,exports){
+},{"../tensor":146,"../util":151,"./graph":39,"./graph_util":41}],66:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -5550,234 +8226,25 @@ var SummedTensorArrayMap = (function (_super) {
 }(TensorArrayMapBase));
 exports.SummedTensorArrayMap = SummedTensorArrayMap;
 
-},{}],50:[function(require,module,exports){
+},{}],67:[function(require,module,exports){
 "use strict";
+function __export(m) {
+    for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
+}
 Object.defineProperty(exports, "__esModule", { value: true });
-var session_1 = require("./graph/session");
-var ndarray_1 = require("./math/ndarray");
-var DEFAULT_EVAL_INTERVAL_MS = 1500;
-var DEFAULT_COST_INTERVAL_MS = 500;
-var DEFAULT_INFERENCE_EXAMPLE_INTERVAL_MS = 3000;
-var MetricReduction;
-(function (MetricReduction) {
-    MetricReduction[MetricReduction["SUM"] = 0] = "SUM";
-    MetricReduction[MetricReduction["MEAN"] = 1] = "MEAN";
-})(MetricReduction = exports.MetricReduction || (exports.MetricReduction = {}));
-var GraphRunner = (function () {
-    function GraphRunner(math, session, eventObserver) {
-        this.math = math;
-        this.session = session;
-        this.eventObserver = eventObserver;
-        this.lastCostTimestamp = 0;
-        this.lastEvalTimestamp = 0;
-        this.resetStatistics();
-        this.zeroScalar = ndarray_1.Scalar.new(0);
-    }
-    GraphRunner.prototype.resetStatistics = function () {
-        this.totalBatchesTrained = 0;
-    };
-    GraphRunner.prototype.train = function (costTensor, trainFeedEntries, batchSize, optimizer, numBatches, metricTensor, metricFeedEntries, metricBatchSize, metricReduction, evalIntervalMs, costIntervalMs) {
-        if (metricReduction === void 0) { metricReduction = MetricReduction.MEAN; }
-        if (evalIntervalMs === void 0) { evalIntervalMs = DEFAULT_EVAL_INTERVAL_MS; }
-        if (costIntervalMs === void 0) { costIntervalMs = DEFAULT_COST_INTERVAL_MS; }
-        this.costTensor = costTensor;
-        this.trainFeedEntries = trainFeedEntries;
-        this.metricTensor = metricTensor;
-        this.metricFeedEntries = metricFeedEntries;
-        if (metricBatchSize != null && this.metricBatchSize !== metricBatchSize) {
-            if (this.metricBatchSizeScalar != null) {
-                this.metricBatchSizeScalar.dispose();
-            }
-            this.metricBatchSizeScalar = ndarray_1.Scalar.new(metricBatchSize);
-        }
-        this.metricBatchSize = metricBatchSize;
-        this.metricReduction = metricReduction;
-        this.batchSize = batchSize;
-        this.optimizer = optimizer;
-        this.metricIntervalMs = evalIntervalMs;
-        this.costIntervalMs = costIntervalMs;
-        this.currentTrainLoopNumBatches = numBatches;
-        this.batchesTrainedThisRun = 0;
-        this.isTraining = true;
-        this.trainStartTimestamp = performance.now();
-        this.trainNetwork();
-    };
-    GraphRunner.prototype.stopTraining = function () {
-        this.isTraining = false;
-    };
-    GraphRunner.prototype.resumeTraining = function () {
-        this.isTraining = true;
-        this.trainNetwork();
-    };
-    GraphRunner.prototype.trainNetwork = function () {
-        var _this = this;
-        if (this.batchesTrainedThisRun === this.currentTrainLoopNumBatches) {
-            this.stopTraining();
-        }
-        if (!this.isTraining) {
-            if (this.eventObserver.doneTrainingCallback != null) {
-                this.eventObserver.doneTrainingCallback();
-            }
-            return;
-        }
-        var start = performance.now();
-        var shouldComputeCost = this.eventObserver.avgCostCallback != null &&
-            (start - this.lastCostTimestamp > this.costIntervalMs);
-        if (shouldComputeCost) {
-            this.lastCostTimestamp = start;
-        }
-        var costReduction = shouldComputeCost ? session_1.CostReduction.MEAN : session_1.CostReduction.NONE;
-        this.math.scope(function (keep) {
-            var avgCost = _this.session.train(_this.costTensor, _this.trainFeedEntries, _this.batchSize, _this.optimizer, costReduction);
-            if (shouldComputeCost) {
-                var trainTime = performance.now() - start;
-                _this.eventObserver.avgCostCallback(avgCost);
-                if (_this.eventObserver.trainExamplesPerSecCallback != null) {
-                    var examplesPerSec = (_this.batchSize * 1000 / trainTime);
-                    _this.eventObserver.trainExamplesPerSecCallback(examplesPerSec);
-                }
-            }
-            if (_this.eventObserver.metricCallback != null &&
-                _this.metricFeedEntries != null &&
-                start - _this.lastEvalTimestamp > _this.metricIntervalMs) {
-                _this.lastEvalTimestamp = start;
-                if (_this.lastComputedMetric != null) {
-                    _this.lastComputedMetric.dispose();
-                }
-                _this.lastComputedMetric = _this.computeMetric();
-                _this.eventObserver.metricCallback(_this.lastComputedMetric);
-            }
-            if (_this.eventObserver.totalTimeCallback != null) {
-                _this.eventObserver.totalTimeCallback((start - _this.trainStartTimestamp) / 1000);
-            }
-            _this.batchesTrainedThisRun++;
-            _this.totalBatchesTrained++;
-            if (_this.eventObserver.batchesTrainedCallback != null) {
-                _this.eventObserver.batchesTrainedCallback(_this.totalBatchesTrained);
-            }
-        });
-        requestAnimationFrame(function () { return _this.trainNetwork(); });
-    };
-    GraphRunner.prototype.infer = function (inferenceTensor, inferenceFeedEntries, inferenceExampleIntervalMs, inferenceExampleCount, numPasses) {
-        var _this = this;
-        if (inferenceExampleIntervalMs === void 0) { inferenceExampleIntervalMs = DEFAULT_INFERENCE_EXAMPLE_INTERVAL_MS; }
-        if (inferenceExampleCount === void 0) { inferenceExampleCount = 5; }
-        if (this.eventObserver.inferenceExamplesCallback == null &&
-            this.eventObserver.inferenceExamplesPerSecCallback == null) {
-            throw new Error('Cannot start inference loop, no inference example or ' +
-                'examples/sec observer provided.');
-        }
-        for (var i = 0; i < inferenceFeedEntries.length; i++) {
-            var feedEntry = inferenceFeedEntries[i];
-            if (feedEntry.data instanceof ndarray_1.NDArray) {
-                throw new Error('Cannot start inference on the model runner with feed entries of ' +
-                    'type NDArray. Please use InputProviders.');
-            }
-        }
-        this.inferenceExampleIntervalMs = inferenceExampleIntervalMs;
-        this.inferenceTensor = inferenceTensor;
-        this.inferenceFeedEntries = inferenceFeedEntries;
-        this.inferenceExampleCount = inferenceExampleCount;
-        this.currentInferenceLoopNumPasses = numPasses;
-        if (!this.isInferring) {
-            this.inferencePassesThisRun = 0;
-            requestAnimationFrame(function () { return _this.inferNetwork(); });
-        }
-        this.isInferring = true;
-    };
-    GraphRunner.prototype.inferNetwork = function () {
-        var _this = this;
-        if (!this.isInferring ||
-            this.inferencePassesThisRun === this.currentInferenceLoopNumPasses) {
-            return;
-        }
-        this.math.scope(function (keep) {
-            var feeds = [];
-            var inferenceValues = [];
-            var start = performance.now();
-            for (var i = 0; i < _this.inferenceExampleCount; i++) {
-                var ndarrayFeedEntries = [];
-                for (var j = 0; j < _this.inferenceFeedEntries.length; j++) {
-                    var feedEntry = _this.inferenceFeedEntries[j];
-                    var nextCopy = feedEntry.data.getNextCopy(_this.math);
-                    ndarrayFeedEntries.push({ tensor: feedEntry.tensor, data: nextCopy });
-                }
-                feeds.push(ndarrayFeedEntries);
-                inferenceValues.push(_this.session.eval(_this.inferenceTensor, ndarrayFeedEntries));
-            }
-            if (_this.eventObserver.inferenceExamplesPerSecCallback != null) {
-                inferenceValues[inferenceValues.length - 1].dataSync();
-                var inferenceExamplesPerSecTime = performance.now() - start;
-                var examplesPerSec = (_this.inferenceExampleCount * 1000 / inferenceExamplesPerSecTime);
-                _this.eventObserver.inferenceExamplesPerSecCallback(examplesPerSec);
-            }
-            if (_this.eventObserver.inferenceExamplesCallback != null) {
-                _this.eventObserver.inferenceExamplesCallback(feeds, inferenceValues);
-            }
-            _this.inferencePassesThisRun++;
-        });
-        this.lastInferTimeoutID = window.setTimeout(function () { return _this.inferNetwork(); }, this.inferenceExampleIntervalMs);
-    };
-    GraphRunner.prototype.stopInferring = function () {
-        this.isInferring = false;
-        window.clearTimeout(this.lastInferTimeoutID);
-    };
-    GraphRunner.prototype.isInferenceRunning = function () {
-        return this.isInferring;
-    };
-    GraphRunner.prototype.computeMetric = function () {
-        var _this = this;
-        if (this.metricFeedEntries == null) {
-            throw new Error('Cannot compute metric, no metric FeedEntries provided.');
-        }
-        var metric = this.zeroScalar;
-        return this.math.scope(function (keep) {
-            for (var i = 0; i < _this.metricBatchSize; i++) {
-                var metricValue = _this.session.eval(_this.metricTensor, _this.metricFeedEntries);
-                metric = _this.math.add(metric, metricValue);
-            }
-            if (_this.metricReduction === MetricReduction.MEAN) {
-                metric = _this.math.divide(metric, _this.metricBatchSizeScalar);
-            }
-            return metric;
-        });
-    };
-    GraphRunner.prototype.getTotalBatchesTrained = function () {
-        return this.totalBatchesTrained;
-    };
-    GraphRunner.prototype.getLastComputedMetric = function () {
-        return this.lastComputedMetric;
-    };
-    GraphRunner.prototype.setMath = function (math) {
-        this.math = math;
-    };
-    GraphRunner.prototype.setSession = function (session) {
-        this.session = session;
-    };
-    GraphRunner.prototype.setInferenceTensor = function (inferenceTensor) {
-        this.inferenceTensor = inferenceTensor;
-    };
-    GraphRunner.prototype.setInferenceExampleCount = function (inferenceExampleCount) {
-        this.inferenceExampleCount = inferenceExampleCount;
-    };
-    return GraphRunner;
-}());
-exports.GraphRunner = GraphRunner;
-
-},{"./graph/session":47,"./math/ndarray":94}],51:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
+var browser_util_1 = require("./browser_util");
+var contrib = require("./contrib");
+exports.contrib = contrib;
 var xhr_dataset = require("./data/xhr-dataset");
 exports.xhr_dataset = xhr_dataset;
 var environment = require("./environment");
 exports.environment = environment;
-var gpgpu_util = require("./math/backends/webgl/gpgpu_util");
+var environment_1 = require("./environment");
+var gpgpu_util = require("./kernels/webgl/gpgpu_util");
 exports.gpgpu_util = gpgpu_util;
-var render_ndarray_gpu_util = require("./math/backends/webgl/render_ndarray_gpu_util");
-exports.render_ndarray_gpu_util = render_ndarray_gpu_util;
-var webgl_util = require("./math/backends/webgl/webgl_util");
+var webgl_util = require("./kernels/webgl/webgl_util");
 exports.webgl_util = webgl_util;
-var conv_util = require("./math/conv_util");
+var conv_util = require("./ops/conv_util");
 exports.conv_util = conv_util;
 var test_util = require("./test_util");
 exports.test_util = test_util;
@@ -5794,377 +8261,80 @@ exports.InCPUMemoryShuffledInputProviderBuilder = input_provider_1.InCPUMemorySh
 exports.InGPUMemoryShuffledInputProviderBuilder = input_provider_1.InGPUMemoryShuffledInputProviderBuilder;
 var xhr_dataset_1 = require("./data/xhr-dataset");
 exports.XhrDataset = xhr_dataset_1.XhrDataset;
-var environment_1 = require("./environment");
-exports.ENV = environment_1.ENV;
-exports.Environment = environment_1.Environment;
+var environment_2 = require("./environment");
+exports.ENV = environment_2.ENV;
+exports.Environment = environment_2.Environment;
 var graph_1 = require("./graph/graph");
 exports.Graph = graph_1.Graph;
-exports.Tensor = graph_1.Tensor;
-var adadelta_optimizer_1 = require("./graph/optimizers/adadelta_optimizer");
-exports.AdadeltaOptimizer = adadelta_optimizer_1.AdadeltaOptimizer;
-var adagrad_optimizer_1 = require("./graph/optimizers/adagrad_optimizer");
-exports.AdagradOptimizer = adagrad_optimizer_1.AdagradOptimizer;
-var adam_optimizer_1 = require("./graph/optimizers/adam_optimizer");
-exports.AdamOptimizer = adam_optimizer_1.AdamOptimizer;
-var adamax_optimizer_1 = require("./graph/optimizers/adamax_optimizer");
-exports.AdamaxOptimizer = adamax_optimizer_1.AdamaxOptimizer;
-var momentum_optimizer_1 = require("./graph/optimizers/momentum_optimizer");
-exports.MomentumOptimizer = momentum_optimizer_1.MomentumOptimizer;
-var optimizer_1 = require("./graph/optimizers/optimizer");
-exports.Optimizer = optimizer_1.Optimizer;
-var rmsprop_optimizer_1 = require("./graph/optimizers/rmsprop_optimizer");
-exports.RMSPropOptimizer = rmsprop_optimizer_1.RMSPropOptimizer;
-var sgd_optimizer_1 = require("./graph/optimizers/sgd_optimizer");
-exports.SGDOptimizer = sgd_optimizer_1.SGDOptimizer;
-var session_1 = require("./graph/session");
-exports.CostReduction = session_1.CostReduction;
-exports.Session = session_1.Session;
-var graph_runner_1 = require("./graph_runner");
+exports.SymbolicTensor = graph_1.SymbolicTensor;
+var graph_runner_1 = require("./graph/graph_runner");
 exports.GraphRunner = graph_runner_1.GraphRunner;
 exports.MetricReduction = graph_runner_1.MetricReduction;
-var initializers_1 = require("./initializers");
+var initializers_1 = require("./graph/initializers");
 exports.ConstantInitializer = initializers_1.ConstantInitializer;
-exports.NDArrayInitializer = initializers_1.NDArrayInitializer;
 exports.OnesInitializer = initializers_1.OnesInitializer;
 exports.RandomNormalInitializer = initializers_1.RandomNormalInitializer;
 exports.RandomTruncatedNormalInitializer = initializers_1.RandomTruncatedNormalInitializer;
 exports.RandomUniformInitializer = initializers_1.RandomUniformInitializer;
+exports.TensorInitializer = initializers_1.TensorInitializer;
 exports.VarianceScalingInitializer = initializers_1.VarianceScalingInitializer;
 exports.ZerosInitializer = initializers_1.ZerosInitializer;
-var backend_cpu_1 = require("./math/backends/backend_cpu");
+var session_1 = require("./graph/session");
+exports.CostReduction = session_1.CostReduction;
+exports.Session = session_1.Session;
+var backend_cpu_1 = require("./kernels/backend_cpu");
 exports.MathBackendCPU = backend_cpu_1.MathBackendCPU;
 exports.NDArrayMathCPU = backend_cpu_1.NDArrayMathCPU;
-var backend_webgl_1 = require("./math/backends/backend_webgl");
+var backend_webgl_1 = require("./kernels/backend_webgl");
 exports.MathBackendWebGL = backend_webgl_1.MathBackendWebGL;
 exports.NDArrayMathGPU = backend_webgl_1.NDArrayMathGPU;
-var matmul_1 = require("./math/backends/types/matmul");
+var matmul_1 = require("./kernels/types/matmul");
 exports.MatrixOrientation = matmul_1.MatrixOrientation;
-var gpgpu_context_1 = require("./math/backends/webgl/gpgpu_context");
+var gpgpu_context_1 = require("./kernels/webgl/gpgpu_context");
 exports.GPGPUContext = gpgpu_context_1.GPGPUContext;
-var math_1 = require("./math/math");
+var math_1 = require("./math");
 exports.NDArrayMath = math_1.NDArrayMath;
-var ndarray_1 = require("./math/ndarray");
-exports.Array1D = ndarray_1.Array1D;
-exports.Array2D = ndarray_1.Array2D;
-exports.Array3D = ndarray_1.Array3D;
-exports.Array4D = ndarray_1.Array4D;
-exports.NDArray = ndarray_1.NDArray;
-exports.Scalar = ndarray_1.Scalar;
+var adadelta_optimizer_1 = require("./optimizers/adadelta_optimizer");
+exports.AdadeltaOptimizer = adadelta_optimizer_1.AdadeltaOptimizer;
+var adagrad_optimizer_1 = require("./optimizers/adagrad_optimizer");
+exports.AdagradOptimizer = adagrad_optimizer_1.AdagradOptimizer;
+var adam_optimizer_1 = require("./optimizers/adam_optimizer");
+exports.AdamOptimizer = adam_optimizer_1.AdamOptimizer;
+var adamax_optimizer_1 = require("./optimizers/adamax_optimizer");
+exports.AdamaxOptimizer = adamax_optimizer_1.AdamaxOptimizer;
+var momentum_optimizer_1 = require("./optimizers/momentum_optimizer");
+exports.MomentumOptimizer = momentum_optimizer_1.MomentumOptimizer;
+var optimizer_1 = require("./optimizers/optimizer");
+exports.Optimizer = optimizer_1.Optimizer;
+var rmsprop_optimizer_1 = require("./optimizers/rmsprop_optimizer");
+exports.RMSPropOptimizer = rmsprop_optimizer_1.RMSPropOptimizer;
+var sgd_optimizer_1 = require("./optimizers/sgd_optimizer");
+exports.SGDOptimizer = sgd_optimizer_1.SGDOptimizer;
+var tensor_1 = require("./tensor");
+exports.Array1D = tensor_1.Array1D;
+exports.Array2D = tensor_1.Array2D;
+exports.Array3D = tensor_1.Array3D;
+exports.Array4D = tensor_1.Array4D;
+exports.NDArray = tensor_1.NDArray;
+exports.Scalar = tensor_1.Scalar;
+exports.Tensor = tensor_1.Tensor;
+exports.Tensor1D = tensor_1.Tensor1D;
+exports.Tensor2D = tensor_1.Tensor2D;
+exports.Tensor3D = tensor_1.Tensor3D;
+exports.Tensor4D = tensor_1.Tensor4D;
+exports.variable = tensor_1.variable;
+exports.Variable = tensor_1.Variable;
+var types_1 = require("./types");
+exports.Rank = types_1.Rank;
+__export(require("./ops/ops"));
+__export(require("./train"));
+__export(require("./globals"));
+exports.setBackend = environment_1.Environment.setBackend;
+exports.getBackend = environment_1.Environment.getBackend;
+exports.memory = environment_1.Environment.memory;
+exports.nextFrame = browser_util_1.BrowserUtil.nextFrame;
 
-},{"./data/checkpoint_loader":10,"./data/dataset":11,"./data/input_provider":12,"./data/xhr-dataset":13,"./environment":15,"./graph/graph":16,"./graph/optimizers/adadelta_optimizer":38,"./graph/optimizers/adagrad_optimizer":39,"./graph/optimizers/adam_optimizer":40,"./graph/optimizers/adamax_optimizer":41,"./graph/optimizers/momentum_optimizer":42,"./graph/optimizers/optimizer":43,"./graph/optimizers/rmsprop_optimizer":44,"./graph/optimizers/sgd_optimizer":45,"./graph/session":47,"./graph_runner":50,"./initializers":52,"./math/backends/backend_cpu":55,"./math/backends/backend_webgl":57,"./math/backends/types/matmul":60,"./math/backends/webgl/gpgpu_context":70,"./math/backends/webgl/gpgpu_util":72,"./math/backends/webgl/render_ndarray_gpu_util":79,"./math/backends/webgl/webgl_util":88,"./math/conv_util":91,"./math/math":93,"./math/ndarray":94,"./test_util":99,"./util":100,"./version":101}],52:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("./math/ndarray");
-var VarianceScalingInitializer = (function () {
-    function VarianceScalingInitializer(scale, mode, distribution) {
-        if (scale === void 0) { scale = 1.0; }
-        if (mode === void 0) { mode = 'fan_in'; }
-        if (distribution === void 0) { distribution = 'normal'; }
-        this.scale = scale;
-        this.mode = mode;
-        this.distribution = distribution;
-    }
-    VarianceScalingInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
-        var n = 0;
-        if (this.mode === 'fan_in') {
-            n = inputUnits;
-        }
-        else if (this.mode === 'fan_out') {
-            n = outputUnits;
-        }
-        else if (this.mode === 'fan_avg') {
-            n = (inputUnits + outputUnits) / 2;
-        }
-        else {
-            throw new Error("Unexpected mode for variance scaling initializer: " + this.mode);
-        }
-        if (this.distribution === 'normal') {
-            return ndarray_1.NDArray.randTruncatedNormal(weightsShape, 0.0, Math.sqrt(this.scale / n));
-        }
-        else if (this.distribution === 'uniform') {
-            return ndarray_1.NDArray.randUniform(weightsShape, 0.0, Math.sqrt(3 * this.scale / n));
-        }
-        else {
-            throw new Error("Unexpected distribution for variance scaling initializer: " +
-                ("" + this.distribution));
-        }
-    };
-    return VarianceScalingInitializer;
-}());
-exports.VarianceScalingInitializer = VarianceScalingInitializer;
-var ZerosInitializer = (function () {
-    function ZerosInitializer() {
-    }
-    ZerosInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
-        return ndarray_1.NDArray.zeros(weightsShape);
-    };
-    return ZerosInitializer;
-}());
-exports.ZerosInitializer = ZerosInitializer;
-var OnesInitializer = (function () {
-    function OnesInitializer() {
-    }
-    OnesInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
-        var values = ndarray_1.NDArray.zeros(weightsShape);
-        values.fill(1);
-        return values;
-    };
-    return OnesInitializer;
-}());
-exports.OnesInitializer = OnesInitializer;
-var ConstantInitializer = (function () {
-    function ConstantInitializer(value) {
-        if (value === void 0) { value = 0; }
-        this.value = value;
-    }
-    ConstantInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
-        var values = ndarray_1.NDArray.zeros(weightsShape);
-        values.fill(this.value);
-        return values;
-    };
-    return ConstantInitializer;
-}());
-exports.ConstantInitializer = ConstantInitializer;
-var NDArrayInitializer = (function () {
-    function NDArrayInitializer(ndarray) {
-        this.ndarray = ndarray;
-    }
-    NDArrayInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
-        return this.ndarray;
-    };
-    return NDArrayInitializer;
-}());
-exports.NDArrayInitializer = NDArrayInitializer;
-var RandomNormalInitializer = (function () {
-    function RandomNormalInitializer(mean, stdev) {
-        if (mean === void 0) { mean = 0; }
-        if (stdev === void 0) { stdev = .05; }
-        this.mean = mean;
-        this.stdev = stdev;
-    }
-    RandomNormalInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
-        return ndarray_1.NDArray.randNormal(weightsShape, this.mean, this.stdev);
-    };
-    return RandomNormalInitializer;
-}());
-exports.RandomNormalInitializer = RandomNormalInitializer;
-var RandomTruncatedNormalInitializer = (function () {
-    function RandomTruncatedNormalInitializer(mean, stdev) {
-        if (mean === void 0) { mean = 0; }
-        if (stdev === void 0) { stdev = .05; }
-        this.mean = mean;
-        this.stdev = stdev;
-    }
-    RandomTruncatedNormalInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
-        return ndarray_1.NDArray.randTruncatedNormal(weightsShape, this.mean, this.stdev);
-    };
-    return RandomTruncatedNormalInitializer;
-}());
-exports.RandomTruncatedNormalInitializer = RandomTruncatedNormalInitializer;
-var RandomUniformInitializer = (function () {
-    function RandomUniformInitializer(minval, maxval) {
-        if (minval === void 0) { minval = -.05; }
-        if (maxval === void 0) { maxval = .05; }
-        this.minval = minval;
-        this.maxval = maxval;
-    }
-    RandomUniformInitializer.prototype.initialize = function (weightsShape, inputUnits, outputUnits) {
-        return ndarray_1.NDArray.randUniform(weightsShape, this.minval, this.maxval);
-    };
-    return RandomUniformInitializer;
-}());
-exports.RandomUniformInitializer = RandomUniformInitializer;
-
-},{"./math/ndarray":94}],53:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("./ndarray");
-var TanHFunc = (function () {
-    function TanHFunc() {
-        this.one = ndarray_1.Scalar.new(1);
-    }
-    TanHFunc.prototype.output = function (math, x) {
-        return math.tanh(x);
-    };
-    TanHFunc.prototype.der = function (math, x, y) {
-        var _this = this;
-        return math.scope(function () {
-            var ySquared = math.elementWiseMul(y, y);
-            return math.scalarMinusArray(_this.one, ySquared);
-        });
-    };
-    TanHFunc.prototype.dispose = function () {
-        this.one.dispose();
-    };
-    return TanHFunc;
-}());
-exports.TanHFunc = TanHFunc;
-var ReLUFunc = (function () {
-    function ReLUFunc() {
-    }
-    ReLUFunc.prototype.output = function (math, x) {
-        return math.relu(x);
-    };
-    ReLUFunc.prototype.der = function (math, x, y) {
-        return math.step(x);
-    };
-    ReLUFunc.prototype.dispose = function () { };
-    return ReLUFunc;
-}());
-exports.ReLUFunc = ReLUFunc;
-var LeakyReluFunc = (function () {
-    function LeakyReluFunc(alpha) {
-        this.alpha = alpha;
-    }
-    LeakyReluFunc.prototype.output = function (math, x) {
-        return math.leakyRelu(x, this.alpha);
-    };
-    LeakyReluFunc.prototype.der = function (math, x, y) {
-        return math.step(x, this.alpha);
-    };
-    LeakyReluFunc.prototype.dispose = function () { };
-    return LeakyReluFunc;
-}());
-exports.LeakyReluFunc = LeakyReluFunc;
-var SigmoidFunc = (function () {
-    function SigmoidFunc() {
-    }
-    SigmoidFunc.prototype.output = function (math, x) {
-        return math.sigmoid(x);
-    };
-    SigmoidFunc.prototype.der = function (math, x, y) {
-        return math.scope(function () {
-            var ySquared = math.elementWiseMul(y, y);
-            return math.subStrict(y, ySquared);
-        });
-    };
-    SigmoidFunc.prototype.dispose = function () { };
-    return SigmoidFunc;
-}());
-exports.SigmoidFunc = SigmoidFunc;
-var SquareFunc = (function () {
-    function SquareFunc() {
-        this.two = ndarray_1.Scalar.new(2);
-    }
-    SquareFunc.prototype.output = function (math, x) {
-        return math.elementWiseMul(x, x);
-    };
-    SquareFunc.prototype.der = function (math, x, y) {
-        return math.scalarTimesArray(this.two, x);
-    };
-    SquareFunc.prototype.dispose = function () {
-        this.two.dispose();
-    };
-    return SquareFunc;
-}());
-exports.SquareFunc = SquareFunc;
-var EluFunc = (function () {
-    function EluFunc() {
-    }
-    EluFunc.prototype.output = function (math, x) {
-        return math.elu(x);
-    };
-    EluFunc.prototype.der = function (math, x, y) {
-        return math.eluDer(x);
-    };
-    EluFunc.prototype.dispose = function () { };
-    return EluFunc;
-}());
-exports.EluFunc = EluFunc;
-
-},{"./ndarray":94}],54:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-function axesAreInnerMostDims(axes, rank) {
-    for (var i = 0; i < axes.length; ++i) {
-        if (axes[axes.length - i - 1] !== rank - 1 - i) {
-            return false;
-        }
-    }
-    return true;
-}
-exports.axesAreInnerMostDims = axesAreInnerMostDims;
-function combineLocations(outputLoc, reduceLoc, axes) {
-    var rank = outputLoc.length + reduceLoc.length;
-    var loc = [];
-    var outIdx = 0;
-    var reduceIdx = 0;
-    for (var dim = 0; dim < rank; dim++) {
-        if (axes.indexOf(dim) === -1) {
-            loc.push(outputLoc[outIdx++]);
-        }
-        else {
-            loc.push(reduceLoc[reduceIdx++]);
-        }
-    }
-    return loc;
-}
-exports.combineLocations = combineLocations;
-function computeOutAndReduceShapes(aShape, axes) {
-    var outShape = [];
-    var rank = aShape.length;
-    for (var dim = 0; dim < rank; dim++) {
-        if (axes.indexOf(dim) === -1) {
-            outShape.push(aShape[dim]);
-        }
-    }
-    var reduceShape = axes.map(function (dim) { return aShape[dim]; });
-    return [outShape, reduceShape];
-}
-exports.computeOutAndReduceShapes = computeOutAndReduceShapes;
-function expandShapeToKeepDim(shape, axes) {
-    var reduceSubShape = axes.map(function (x) { return 1; });
-    return combineLocations(shape, reduceSubShape, axes);
-}
-exports.expandShapeToKeepDim = expandShapeToKeepDim;
-function parseAxisParam(axis, shape) {
-    if (axis == null) {
-        axis = shape.map(function (s, i) { return i; });
-    }
-    else if (typeof (axis) === 'number') {
-        axis = [axis];
-    }
-    var rank = shape.length;
-    axis.forEach(function (a, i) {
-        if (a < -rank || a >= rank) {
-            throw new Error("Axis must be between -rank and rank-1. " +
-                ("Got axis[" + i + "]=" + a + " where rank is " + rank));
-        }
-    });
-    return axis.map(function (a) { return a < 0 ? rank + a : a; });
-}
-exports.parseAxisParam = parseAxisParam;
-function assertAxesAreInnerMostDims(msg, axes, rank) {
-    if (!axesAreInnerMostDims(axes, rank)) {
-        throw new Error(msg + " supports only inner-most axes for now. " +
-            ("Got axes " + axes + " and rank-" + rank + " input."));
-    }
-}
-exports.assertAxesAreInnerMostDims = assertAxesAreInnerMostDims;
-function getPermutedAxes(axes, rank) {
-    if (axesAreInnerMostDims(axes, rank)) {
-        return null;
-    }
-    var result = [];
-    for (var i = 0; i < rank; ++i) {
-        if (axes.indexOf(i) === -1) {
-            result.push(i);
-        }
-    }
-    axes.forEach(function (axis) { return result.push(axis); });
-    return result;
-}
-exports.getPermutedAxes = getPermutedAxes;
-function getInnerMostAxes(numAxes, rank) {
-    var res = [];
-    for (var i = rank - numAxes; i < rank; ++i) {
-        res.push(i);
-    }
-    return res;
-}
-exports.getInnerMostAxes = getInnerMostAxes;
-
-},{}],55:[function(require,module,exports){
+},{"./browser_util":10,"./contrib":26,"./data/checkpoint_loader":27,"./data/dataset":28,"./data/input_provider":29,"./data/xhr-dataset":30,"./environment":34,"./globals":35,"./graph/graph":39,"./graph/graph_runner":40,"./graph/initializers":42,"./graph/session":64,"./kernels/backend_cpu":68,"./kernels/backend_webgl":69,"./kernels/types/matmul":71,"./kernels/webgl/gpgpu_context":83,"./kernels/webgl/gpgpu_util":85,"./kernels/webgl/webgl_util":104,"./math":105,"./ops/conv_util":115,"./ops/ops":123,"./optimizers/adadelta_optimizer":135,"./optimizers/adagrad_optimizer":136,"./optimizers/adam_optimizer":137,"./optimizers/adamax_optimizer":138,"./optimizers/momentum_optimizer":139,"./optimizers/optimizer":140,"./optimizers/rmsprop_optimizer":142,"./optimizers/sgd_optimizer":143,"./tensor":146,"./test_util":147,"./train":149,"./types":150,"./util":151,"./version":152}],68:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -6213,25 +8383,41 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 var seedrandom = require("seedrandom");
-var environment_1 = require("../../environment");
-var util = require("../../util");
-var broadcast_util = require("../broadcast_util");
-var concat_util = require("../concat_util");
+var environment_1 = require("../environment");
 var math_1 = require("../math");
-var ndarray_1 = require("../ndarray");
+var axis_util = require("../ops/axis_util");
+var broadcast_util = require("../ops/broadcast_util");
+var concat_util = require("../ops/concat_util");
+var ops = require("../ops/ops");
+var ops_1 = require("../ops/ops");
+var selu_util = require("../ops/selu_util");
+var tensor_1 = require("../tensor");
 var types = require("../types");
-var types_1 = require("../types");
-var axis_util = require("./../axis_util");
-var matmul_1 = require("./types/matmul");
+var util = require("../util");
 var MathBackendCPU = (function () {
     function MathBackendCPU() {
-        this.data = {};
+        this.data = new WeakMap();
+        if (typeof document !== 'undefined') {
+            this.canvas = document.createElement('canvas');
+        }
     }
-    MathBackendCPU.prototype.dispose = function () { };
-    MathBackendCPU.prototype.write = function (id, values, dtype, shape) {
-        this.data[id] = values;
+    MathBackendCPU.prototype.register = function (dataId, shape, dtype) {
+        if (this.data.has(dataId)) {
+            throw new Error("Data buffer is already registered");
+        }
+        this.data.set(dataId, null);
     };
-    MathBackendCPU.prototype.writePixels = function (id, pixels, numChannels) {
+    MathBackendCPU.prototype.write = function (dataId, values) {
+        if (values == null) {
+            throw new Error('MathBackendCPU.write(): values can not be null');
+        }
+        this.throwIfNoData(dataId);
+        this.data.set(dataId, values);
+    };
+    MathBackendCPU.prototype.fromPixels = function (pixels, numChannels) {
+        if (pixels == null) {
+            throw new Error('MathBackendCPU.writePixels(): pixels can not be null');
+        }
         var vals;
         if (pixels instanceof ImageData) {
             vals = pixels.data;
@@ -6243,12 +8429,15 @@ var MathBackendCPU = (function () {
         }
         else if (pixels instanceof HTMLImageElement ||
             pixels instanceof HTMLVideoElement) {
-            var canvas = document.createElement('canvas');
-            canvas.width = pixels.width;
-            canvas.height = pixels.height;
-            canvas.getContext('2d').drawImage(pixels, 0, 0, canvas.width, canvas.height);
-            vals = canvas.getContext('2d')
-                .getImageData(0, 0, canvas.width, canvas.height)
+            if (this.canvas == null) {
+                throw new Error('Can\'t read pixels from HTMLImageElement outside ' +
+                    'the browser.');
+            }
+            this.canvas.width = pixels.width;
+            this.canvas.height = pixels.height;
+            this.canvas.getContext('2d').drawImage(pixels, 0, 0, pixels.width, pixels.height);
+            vals = this.canvas.getContext('2d')
+                .getImageData(0, 0, pixels.width, pixels.height)
                 .data;
         }
         else {
@@ -6267,189 +8456,133 @@ var MathBackendCPU = (function () {
                 }
             }
         }
-        this.data[id] = values;
+        var outShape = [pixels.height, pixels.width, numChannels];
+        return ops_1.tensor3d(values, outShape, 'int32');
     };
-    MathBackendCPU.prototype.read = function (id) {
+    MathBackendCPU.prototype.read = function (dataId) {
         return __awaiter(this, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                this.throwIfNoData(id);
-                return [2, this.data[id]];
+                return [2, this.readSync(dataId)];
             });
         });
     };
-    MathBackendCPU.prototype.readSync = function (id) {
-        this.throwIfNoData(id);
-        return this.data[id];
+    MathBackendCPU.prototype.readSync = function (dataId) {
+        this.throwIfNoData(dataId);
+        return this.data.get(dataId);
     };
-    MathBackendCPU.prototype.disposeData = function (id) {
-        delete this.data[id];
-    };
-    MathBackendCPU.prototype.time = function (query) {
-        return __awaiter(this, void 0, void 0, function () {
-            var start;
-            return __generator(this, function (_a) {
-                start = performance.now();
-                query();
-                return [2, performance.now() - start];
-            });
-        });
-    };
-    MathBackendCPU.prototype.throwIfNoData = function (id) {
-        if (!(id in this.data)) {
-            throw new Error("No data found for NDArray with id " + id + ". " +
-                "Use dl.ENV.math instead of constructing your own NDArrayMath. " +
-                "If you need to construct your own math, make sure this array is " +
-                "allocated after the math construction");
+    MathBackendCPU.prototype.disposeData = function (dataId) {
+        if (this.data.has(dataId)) {
+            this.data.delete(dataId);
         }
     };
-    MathBackendCPU.prototype.clone = function (x) {
-        return ndarray_1.NDArray.make(x.shape, { values: new Float32Array(x.dataSync()) });
+    MathBackendCPU.prototype.time = function (f) {
+        return __awaiter(this, void 0, void 0, function () {
+            var start, kernelMs;
+            return __generator(this, function (_a) {
+                start = performance.now();
+                f();
+                kernelMs = performance.now() - start;
+                return [2, { kernelMs: kernelMs }];
+            });
+        });
+    };
+    MathBackendCPU.prototype.memory = function () {
+        return {
+            unreliable: true
+        };
+    };
+    MathBackendCPU.prototype.throwIfNoData = function (dataId) {
+        if (!this.data.has(dataId)) {
+            throw new Error("CPU backend: No data found for this tensor. " +
+                "Did you change your backend in the middle of the program? " +
+                "New backends can't use Tensors created with previous backends");
+        }
     };
     MathBackendCPU.prototype.slice1D = function (x, begin, size) {
         var newVals = x.dataSync().slice(begin, begin + size);
-        return ndarray_1.Array1D.new(newVals);
+        return ops.tensor1d(newVals, x.dtype);
     };
     MathBackendCPU.prototype.slice2D = function (x, begin, size) {
-        var result = ndarray_1.Array2D.zeros(size);
+        var buffer = ops.buffer(size, x.dtype);
         var startI = begin[0], startJ = begin[1];
         for (var i = 0; i < size[0]; ++i) {
             for (var j = 0; j < size[1]; ++j) {
                 var val = x.get(i + startI, j + startJ);
-                result.set(val, i, j);
+                buffer.set(val, i, j);
             }
         }
-        return result;
+        return buffer.toTensor();
     };
     MathBackendCPU.prototype.slice3D = function (x, begin, size) {
-        var result = ndarray_1.Array3D.zeros(size);
+        var buffer = ops.buffer(size, x.dtype);
         var startI = begin[0], startJ = begin[1], startK = begin[2];
         for (var i = 0; i < size[0]; ++i) {
             for (var j = 0; j < size[1]; ++j) {
                 for (var k = 0; k < size[2]; ++k) {
                     var val = x.get(i + startI, j + startJ, k + startK);
-                    result.set(val, i, j, k);
+                    buffer.set(val, i, j, k);
                 }
             }
         }
-        return result;
+        return buffer.toTensor();
     };
     MathBackendCPU.prototype.slice4D = function (x, begin, size) {
-        var result = ndarray_1.Array4D.zeros(size);
+        var buffer = ops.buffer(size, x.dtype);
         var startI = begin[0], startJ = begin[1], startK = begin[2], startL = begin[3];
         for (var i = 0; i < size[0]; ++i) {
             for (var j = 0; j < size[1]; ++j) {
                 for (var k = 0; k < size[2]; ++k) {
                     for (var l = 0; l < size[3]; ++l) {
                         var val = x.get(i + startI, j + startJ, k + startK, l + startL);
-                        result.set(val, i, j, k, l);
+                        buffer.set(val, i, j, k, l);
                     }
                 }
             }
         }
-        return result;
+        return buffer.toTensor();
     };
-    MathBackendCPU.prototype.concat1D = function (a, b) {
-        var outShape = concat_util.computeOutShape(a.shape, b.shape, 0);
-        var result = ndarray_1.Array1D.zeros(outShape);
-        var aVals = a.dataSync();
-        var bVals = b.dataSync();
-        var vals = result.dataSync();
-        vals.set(aVals, 0);
-        vals.set(bVals, a.size);
-        return result;
+    MathBackendCPU.prototype.reverse4D = function (x, axis) {
+        var buffer = ops.buffer(x.shape, x.dtype);
+        var revAxis = function (i) { return axis.indexOf(i) !== -1 && x.shape[i] !== 1; };
+        for (var b = 0; b < x.shape[0]; ++b) {
+            for (var r = 0; r < x.shape[1]; ++r) {
+                for (var c = 0; c < x.shape[2]; ++c) {
+                    for (var d = 0; d < x.shape[3]; ++d) {
+                        var b0 = revAxis(0) ? x.shape[0] - b - 1 : b;
+                        var r0 = revAxis(1) ? x.shape[1] - r - 1 : r;
+                        var c0 = revAxis(2) ? x.shape[2] - c - 1 : c;
+                        var d0 = revAxis(3) ? x.shape[3] - d - 1 : d;
+                        var val = x.get(b0, r0, c0, d0);
+                        buffer.set(val, b, r, c, d);
+                    }
+                }
+            }
+        }
+        return buffer.toTensor();
     };
-    MathBackendCPU.prototype.concat2D = function (a, b, axis) {
-        var outShape = concat_util.computeOutShape(a.shape, b.shape, axis);
-        var result = ndarray_1.Array2D.zeros(outShape);
-        if (axis === 0) {
+    MathBackendCPU.prototype.concat = function (a, b) {
+        var outShape = concat_util.computeOutShape(a.shape, b.shape, 1);
+        var buffer = ops.buffer(outShape, a.dtype);
+        if (a.shape[0] === 1 && b.shape[0] === 1) {
             var aVals = a.dataSync();
             var bVals = b.dataSync();
-            var vals = result.dataSync();
+            var vals = buffer.values;
             vals.set(aVals, 0);
             vals.set(bVals, a.size);
-            return result;
+            return buffer.toTensor();
         }
         for (var i = 0; i < outShape[0]; ++i) {
-            for (var j = 0; j < outShape[1]; ++j) {
-                var index = [i, j];
-                var value = void 0;
-                if (index[axis] < a.shape[axis]) {
-                    value = a.get(i, j);
-                }
-                else {
-                    index[axis] -= a.shape[axis];
-                    var i2 = index[0], j2 = index[1];
-                    value = b.get(i2, j2);
-                }
-                result.set(value, i, j);
+            for (var j = 0; j < a.shape[1]; ++j) {
+                buffer.set(a.get(i, j), i, j);
+            }
+            for (var j = 0; j < b.shape[1]; ++j) {
+                buffer.set(b.get(i, j), i, j + a.shape[1]);
             }
         }
-        return result;
-    };
-    MathBackendCPU.prototype.concat3D = function (a, b, axis) {
-        var outShape = concat_util.computeOutShape(a.shape, b.shape, axis);
-        var result = ndarray_1.Array3D.zeros(outShape);
-        if (axis === 0) {
-            var aVals = a.dataSync();
-            var bVals = b.dataSync();
-            var vals = result.dataSync();
-            vals.set(aVals, 0);
-            vals.set(bVals, a.size);
-            return result;
-        }
-        for (var i = 0; i < outShape[0]; ++i) {
-            for (var j = 0; j < outShape[1]; ++j) {
-                for (var k = 0; k < outShape[2]; ++k) {
-                    var index = [i, j, k];
-                    var value = void 0;
-                    if (index[axis] < a.shape[axis]) {
-                        value = a.get(i, j, k);
-                    }
-                    else {
-                        index[axis] -= a.shape[axis];
-                        var i2 = index[0], j2 = index[1], k2 = index[2];
-                        value = b.get(i2, j2, k2);
-                    }
-                    result.set(value, i, j, k);
-                }
-            }
-        }
-        return result;
-    };
-    MathBackendCPU.prototype.concat4D = function (a, b, axis) {
-        var outShape = concat_util.computeOutShape(a.shape, b.shape, axis);
-        var result = ndarray_1.Array4D.zeros(outShape);
-        if (axis === 0) {
-            var aVals = a.dataSync();
-            var bVals = b.dataSync();
-            var vals = result.dataSync();
-            vals.set(aVals, 0);
-            vals.set(bVals, a.size);
-            return result;
-        }
-        for (var i = 0; i < outShape[0]; ++i) {
-            for (var j = 0; j < outShape[1]; ++j) {
-                for (var k = 0; k < outShape[2]; ++k) {
-                    for (var l = 0; l < outShape[3]; ++l) {
-                        var index = [i, j, k, l];
-                        var value = void 0;
-                        if (index[axis] < a.shape[axis]) {
-                            value = a.get(i, j, k, l);
-                        }
-                        else {
-                            index[axis] -= a.shape[axis];
-                            var i2 = index[0], j2 = index[1], k2 = index[2], l2 = index[3];
-                            value = b.get(i2, j2, k2, l2);
-                        }
-                        result.set(value, i, j, k, l);
-                    }
-                }
-            }
-        }
-        return result;
+        return buffer.toTensor();
     };
     MathBackendCPU.prototype.neg = function (x) {
-        return this.multiply(ndarray_1.Scalar.new(-1), x);
+        return this.multiply(ops.scalar(-1), x);
     };
     MathBackendCPU.prototype.add = function (a, b) {
         return this.broadcastedBinaryOp(a, b, types.upcastType(a.dtype, b.dtype), function (aValue, bValue) { return aValue + bValue; });
@@ -6460,24 +8593,18 @@ var MathBackendCPU = (function () {
     MathBackendCPU.prototype.pow = function (a, b) {
         return this.broadcastedBinaryOp(a, b, a.dtype, function (aValue, bValue) { return Math.pow(aValue, bValue); });
     };
-    MathBackendCPU.prototype.matMul = function (a, b, aOrientation, bOrientation) {
-        if (aOrientation === void 0) { aOrientation = matmul_1.MatrixOrientation.REGULAR; }
-        if (bOrientation === void 0) { bOrientation = matmul_1.MatrixOrientation.REGULAR; }
-        var sharedDim = (aOrientation === matmul_1.MatrixOrientation.REGULAR) ? a.shape[1] : a.shape[0];
-        var leftDim = (aOrientation === matmul_1.MatrixOrientation.REGULAR) ? a.shape[0] : a.shape[1];
-        var rightDim = (bOrientation === matmul_1.MatrixOrientation.REGULAR) ? b.shape[1] : b.shape[0];
+    MathBackendCPU.prototype.matMul = function (a, b, transposeA, transposeB) {
+        var sharedDim = transposeA ? a.shape[0] : a.shape[1];
+        var leftDim = transposeA ? a.shape[1] : a.shape[0];
+        var rightDim = transposeB ? b.shape[0] : b.shape[1];
         var normalGetter = function (matrix, i, j) {
             return matrix.get(i, j);
         };
         var transposedGetter = function (matrix, i, j) {
             return matrix.get(j, i);
         };
-        var aGetter = (aOrientation === matmul_1.MatrixOrientation.REGULAR) ?
-            normalGetter :
-            transposedGetter;
-        var bGetter = (bOrientation === matmul_1.MatrixOrientation.REGULAR) ?
-            normalGetter :
-            transposedGetter;
+        var aGetter = transposeA ? transposedGetter : normalGetter;
+        var bGetter = transposeB ? transposedGetter : normalGetter;
         var values = new Float32Array(leftDim * rightDim);
         var index = 0;
         for (var i = 0; i < leftDim; ++i) {
@@ -6489,7 +8616,7 @@ var MathBackendCPU = (function () {
                 values[index++] = sum;
             }
         }
-        return ndarray_1.Array2D.new([leftDim, rightDim], values);
+        return ops.tensor2d(values, [leftDim, rightDim]);
     };
     MathBackendCPU.prototype.multiply = function (a, b) {
         return this.broadcastedBinaryOp(a, b, types.upcastType(a.dtype, b.dtype), function (aValue, bValue) { return aValue * bValue; });
@@ -6500,8 +8627,8 @@ var MathBackendCPU = (function () {
     MathBackendCPU.prototype.sum = function (x, axes) {
         axis_util.assertAxesAreInnerMostDims('sum', axes, x.rank);
         var _a = axis_util.computeOutAndReduceShapes(x.shape, axes), outShape = _a[0], reduceShape = _a[1];
-        var resultDtype = types_1.SumTypesMap[x.dtype];
-        var result = ndarray_1.NDArray.zeros(outShape, resultDtype);
+        var resultDtype = types.upcastType(x.dtype, 'int32');
+        var result = ops.zeros(outShape, resultDtype);
         var reduceSize = util.sizeFromShape(reduceShape);
         var vals = result.dataSync();
         var aVals = x.dataSync();
@@ -6518,7 +8645,7 @@ var MathBackendCPU = (function () {
     MathBackendCPU.prototype.argMin = function (x, axes) {
         axis_util.assertAxesAreInnerMostDims('argMin', axes, x.rank);
         var _a = axis_util.computeOutAndReduceShapes(x.shape, axes), outShape = _a[0], reduceShape = _a[1];
-        var result = ndarray_1.NDArray.zeros(outShape, 'int32');
+        var result = ops.zeros(outShape, 'int32');
         var reduceSize = util.sizeFromShape(reduceShape);
         var vals = result.dataSync();
         var aVals = x.dataSync();
@@ -6544,7 +8671,7 @@ var MathBackendCPU = (function () {
     MathBackendCPU.prototype.argMax = function (x, axes) {
         axis_util.assertAxesAreInnerMostDims('argMax', axes, x.rank);
         var _a = axis_util.computeOutAndReduceShapes(x.shape, axes), outShape = _a[0], reduceShape = _a[1];
-        var result = ndarray_1.NDArray.zeros(outShape, 'int32');
+        var result = ops.zeros(outShape, 'int32');
         var reduceSize = util.sizeFromShape(reduceShape);
         var vals = result.dataSync();
         var aVals = x.dataSync();
@@ -6577,6 +8704,121 @@ var MathBackendCPU = (function () {
             }
         });
     };
+    MathBackendCPU.prototype.notEqual = function (a, b) {
+        return this.broadcastedBinaryOp(a, b, 'bool', function (aVal, bVal) {
+            if (util.isValNaN(aVal, a.dtype) || util.isValNaN(bVal, b.dtype)) {
+                return util.getNaN('bool');
+            }
+            else {
+                return (aVal !== bVal) ? 1 : 0;
+            }
+        });
+    };
+    MathBackendCPU.prototype.less = function (a, b) {
+        return this.broadcastedBinaryOp(a, b, 'bool', function (aVal, bVal) {
+            if (util.isValNaN(aVal, a.dtype) || util.isValNaN(bVal, b.dtype)) {
+                return util.getNaN('bool');
+            }
+            else {
+                return (aVal < bVal) ? 1 : 0;
+            }
+        });
+    };
+    MathBackendCPU.prototype.lessEqual = function (a, b) {
+        return this.broadcastedBinaryOp(a, b, 'bool', function (aVal, bVal) {
+            if (util.isValNaN(aVal, a.dtype) || util.isValNaN(bVal, b.dtype)) {
+                return util.getNaN('bool');
+            }
+            else {
+                return (aVal <= bVal) ? 1 : 0;
+            }
+        });
+    };
+    MathBackendCPU.prototype.greater = function (a, b) {
+        return this.broadcastedBinaryOp(a, b, 'bool', function (aVal, bVal) {
+            if (util.isValNaN(aVal, a.dtype) || util.isValNaN(bVal, b.dtype)) {
+                return util.getNaN('bool');
+            }
+            else {
+                return (aVal > bVal) ? 1 : 0;
+            }
+        });
+    };
+    MathBackendCPU.prototype.greaterEqual = function (a, b) {
+        return this.broadcastedBinaryOp(a, b, 'bool', function (aVal, bVal) {
+            if (util.isValNaN(aVal, a.dtype) || util.isValNaN(bVal, b.dtype)) {
+                return util.getNaN('bool');
+            }
+            else {
+                return (aVal >= bVal) ? 1 : 0;
+            }
+        });
+    };
+    MathBackendCPU.prototype.logicalNot = function (x) {
+        var values = x.dataSync();
+        var newValues = new Int32Array(values.length);
+        for (var i = 0; i < values.length; ++i) {
+            if (util.isValNaN(values[i], x.dtype)) {
+                newValues[i] = util.getNaN('bool');
+            }
+            else {
+                newValues[i] = values[i] ? 0 : 1;
+            }
+        }
+        return tensor_1.Tensor.make(x.shape, { values: newValues }, 'bool');
+    };
+    MathBackendCPU.prototype.logicalAnd = function (a, b) {
+        return this.broadcastedBinaryOp(a, b, 'bool', function (aVal, bVal) {
+            if (util.isValNaN(aVal, a.dtype) || util.isValNaN(bVal, b.dtype)) {
+                return util.getNaN('bool');
+            }
+            else {
+                return aVal && bVal;
+            }
+        });
+    };
+    MathBackendCPU.prototype.logicalOr = function (a, b) {
+        return this.broadcastedBinaryOp(a, b, 'bool', function (aVal, bVal) {
+            if (util.isValNaN(aVal, a.dtype) || util.isValNaN(bVal, b.dtype)) {
+                return util.getNaN('bool');
+            }
+            else {
+                return aVal || bVal;
+            }
+        });
+    };
+    MathBackendCPU.prototype.logicalXor = function (a, b) {
+        return this.broadcastedBinaryOp(a, b, 'bool', function (aVal, bVal) {
+            if (util.isValNaN(aVal, a.dtype) || util.isValNaN(bVal, b.dtype)) {
+                return util.getNaN('bool');
+            }
+            else {
+                return aVal ^ bVal;
+            }
+        });
+    };
+    MathBackendCPU.prototype.where = function (condition, a, b, dtype) {
+        var values = condition.dataSync();
+        var aValues = a.dataSync();
+        var bValues = b.dataSync();
+        var result = ops.zeros(a.shape, dtype);
+        var newValues = result.dataSync();
+        var index = 0;
+        var offset = condition.rank === 0 || condition.rank > 1 || a.rank === 1 ?
+            1 :
+            a.shape[1];
+        for (var i = 0; i < values.length; i++) {
+            for (var j = 0; j < offset; j++) {
+                if (values[i] === 1) {
+                    newValues[index++] = aValues[i];
+                }
+                else {
+                    newValues[index++] = bValues[i];
+                }
+            }
+        }
+        return result;
+    };
     MathBackendCPU.prototype.topKValues = function (x, k) {
         return this.topK(x, k).values;
     };
@@ -6599,14 +8841,14 @@ var MathBackendCPU = (function () {
             topkIndices[i] = valuesAndIndices[i].index;
         }
         return {
-            values: ndarray_1.Array1D.new(topkValues),
-            indices: ndarray_1.Array1D.new(topkIndices)
+            values: ops.tensor1d(topkValues, x.dtype),
+            indices: tensor_1.Tensor1D.new(topkIndices)
         };
     };
     MathBackendCPU.prototype.min = function (x, axes) {
         axis_util.assertAxesAreInnerMostDims('min', axes, x.rank);
         var _a = axis_util.computeOutAndReduceShapes(x.shape, axes), outShape = _a[0], reduceShape = _a[1];
-        var result = ndarray_1.NDArray.zeros(outShape, x.dtype);
+        var result = ops.zeros(outShape, x.dtype);
         var reduceSize = util.sizeFromShape(reduceShape);
         var vals = result.dataSync();
         var aVals = x.dataSync();
@@ -6633,7 +8875,7 @@ var MathBackendCPU = (function () {
     MathBackendCPU.prototype.max = function (x, axes) {
         axis_util.assertAxesAreInnerMostDims('max', axes, x.rank);
         var _a = axis_util.computeOutAndReduceShapes(x.shape, axes), outShape = _a[0], reduceShape = _a[1];
-        var result = ndarray_1.NDArray.zeros(outShape, x.dtype);
+        var result = ops.zeros(outShape, x.dtype);
         var reduceSize = util.sizeFromShape(reduceShape);
         var vals = result.dataSync();
         var aVals = x.dataSync();
@@ -6663,7 +8905,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             newValues[i] = Math.ceil(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: newValues });
+        return tensor_1.Tensor.make(x.shape, { values: newValues });
     };
     MathBackendCPU.prototype.floor = function (x) {
         var values = x.dataSync();
@@ -6671,7 +8913,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             newValues[i] = Math.floor(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: newValues });
+        return tensor_1.Tensor.make(x.shape, { values: newValues });
     };
     MathBackendCPU.prototype.exp = function (x) {
         var values = x.dataSync();
@@ -6679,7 +8921,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             newValues[i] = Math.exp(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: newValues });
+        return tensor_1.Tensor.make(x.shape, { values: newValues });
     };
     MathBackendCPU.prototype.log = function (x) {
         var values = x.dataSync();
@@ -6688,7 +8930,7 @@ var MathBackendCPU = (function () {
             var value = values[i];
             newValues[i] = Math.log(value);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: newValues });
+        return tensor_1.Tensor.make(x.shape, { values: newValues });
     };
     MathBackendCPU.prototype.sqrt = function (x) {
         var values = x.dataSync();
@@ -6697,7 +8939,7 @@ var MathBackendCPU = (function () {
             var value = values[i];
             newValues[i] = Math.sqrt(value);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: newValues });
+        return tensor_1.Tensor.make(x.shape, { values: newValues });
     };
     MathBackendCPU.prototype.square = function (x) {
         var values = x.dataSync();
@@ -6706,10 +8948,10 @@ var MathBackendCPU = (function () {
             var value = values[i];
             newValues[i] = value * value;
         }
-        return ndarray_1.NDArray.make(x.shape, { values: newValues });
+        return tensor_1.Tensor.make(x.shape, { values: newValues });
     };
     MathBackendCPU.prototype.relu = function (x) {
-        var res = ndarray_1.NDArray.zeros(x.shape, x.dtype);
+        var res = ops.zeros(x.shape, x.dtype);
         var resVals = res.dataSync();
         var inVals = x.dataSync();
         for (var i = 0; i < inVals.length; ++i) {
@@ -6735,7 +8977,7 @@ var MathBackendCPU = (function () {
                 resultValues[i] = (Math.exp(v) - 1);
             }
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.eluDer = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6749,11 +8991,11 @@ var MathBackendCPU = (function () {
                 resultValues[i] = Math.exp(v);
             }
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.selu = function (x) {
-        var scaleAlpha = 1.7580993408473768599402175208123;
-        var scale = 1.0507009873554804934193349852946;
+        var scaleAlpha = selu_util.SELU_SCALEALPHA;
+        var scale = selu_util.SELU_SCALE;
         var resultValues = new Float32Array(x.size);
         var values = x.dataSync();
         for (var i = 0; i < values.length; ++i) {
@@ -6765,7 +9007,7 @@ var MathBackendCPU = (function () {
                 resultValues[i] = scaleAlpha * (Math.exp(v) - 1);
             }
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.leakyRelu = function (x, alpha) {
         var resultValues = new Float32Array(x.size);
@@ -6779,7 +9021,7 @@ var MathBackendCPU = (function () {
                 resultValues[i] = alpha * v;
             }
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.prelu = function (x, alpha) {
         var resultValues = new Float32Array(x.size);
@@ -6794,7 +9036,7 @@ var MathBackendCPU = (function () {
                 resultValues[i] = alphas[i] * v;
             }
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.preluDer = function (x, alpha) {
         var resultValues = new Float32Array(x.size);
@@ -6812,7 +9054,7 @@ var MathBackendCPU = (function () {
                 resultValues[i] = v;
             }
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.clip = function (x, min, max) {
         var resultValues = new Float32Array(x.size);
@@ -6820,7 +9062,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.min(max, Math.max(min, values[i]));
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.abs = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6828,7 +9070,15 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.abs(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
+    };
+    MathBackendCPU.prototype.int = function (x) {
+        var resultValues = new Int32Array(x.size);
+        var values = x.dataSync();
+        for (var i = 0; i < values.length; ++i) {
+            resultValues[i] = values[i];
+        }
+        return tensor_1.Tensor.make(x.shape, { values: resultValues }, 'int32');
     };
     MathBackendCPU.prototype.sigmoid = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6836,7 +9086,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = 1 / (1 + Math.exp(-values[i]));
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.sin = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6844,7 +9094,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.sin(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.cos = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6852,7 +9102,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.cos(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.tan = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6860,7 +9110,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.tan(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.asin = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6868,7 +9118,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.asin(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.acos = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6876,7 +9126,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.acos(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.atan = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6884,7 +9134,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.atan(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.sinh = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6892,7 +9142,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.sinh(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.cosh = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6900,7 +9150,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = Math.cosh(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.tanh = function (x) {
         var resultValues = new Float32Array(x.size);
@@ -6908,7 +9158,7 @@ var MathBackendCPU = (function () {
         for (var i = 0; i < values.length; ++i) {
             resultValues[i] = util.tanh(values[i]);
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
     MathBackendCPU.prototype.step = function (x, alpha) {
         if (alpha === void 0) { alpha = 0; }
@@ -6923,14 +9173,14 @@ var MathBackendCPU = (function () {
                 resultValues[i] = value > 0 ? 1 : alpha;
             }
         }
-        return ndarray_1.NDArray.make(x.shape, { values: resultValues });
+        return tensor_1.Tensor.make(x.shape, { values: resultValues });
     };
-    MathBackendCPU.prototype.conv2d = function (x, filter, bias, convInfo) {
+    MathBackendCPU.prototype.conv2d = function (x, filter, convInfo) {
         var filterHeight = convInfo.filterHeight;
         var filterWidth = convInfo.filterWidth;
         var padLeft = convInfo.padInfo.left;
         var padTop = convInfo.padInfo.top;
-        var y = ndarray_1.Array4D.zeros(convInfo.outShape);
+        var y = ops.buffer(convInfo.outShape, x.dtype);
         for (var b = 0; b < convInfo.batchSize; ++b) {
             for (var d2 = 0; d2 < convInfo.outChannels; ++d2) {
                 for (var yR = 0; yR < convInfo.outHeight; ++yR) {
@@ -6953,13 +9203,12 @@ var MathBackendCPU = (function () {
                                 }
                             }
                         }
-                        var biasVal = (bias != null) ? bias.get(d2) : 0;
-                        y.set(dotProd + biasVal, b, yR, yC, d2);
+                        y.set(dotProd, b, yR, yC, d2);
                     }
                 }
             }
         }
-        return y;
+        return y.toTensor();
     };
     MathBackendCPU.prototype.conv2dDerInput = function (dy, filter, convInfo) {
         var filterHeight = convInfo.filterHeight;
@@ -6968,7 +9217,7 @@ var MathBackendCPU = (function () {
         var leftPad = filterWidth - 1 - convInfo.padInfo.left;
         var strideHeight = convInfo.strideHeight;
         var strideWidth = convInfo.strideWidth;
-        var dx = ndarray_1.Array4D.zeros(convInfo.inShape);
+        var dx = ops.buffer(convInfo.inShape, 'float32');
         for (var b = 0; b < convInfo.batchSize; ++b) {
             for (var d1 = 0; d1 < convInfo.inChannels; ++d1) {
                 for (var xR = 0; xR < convInfo.inHeight; ++xR) {
@@ -6996,14 +9245,14 @@ var MathBackendCPU = (function () {
                 }
             }
         }
-        return dx;
+        return dx.toTensor();
     };
     MathBackendCPU.prototype.conv2dDerFilter = function (x, dy, convInfo) {
         var strideHeight = convInfo.strideHeight;
         var strideWidth = convInfo.strideWidth;
         var filterHeight = convInfo.filterHeight;
         var filterWidth = convInfo.filterWidth;
-        var dW = ndarray_1.Array4D.zeros(convInfo.filterShape);
+        var dW = ops.buffer(convInfo.filterShape, 'float32');
         var leftPad = convInfo.padInfo.left;
         var topPad = convInfo.padInfo.top;
         for (var wR = 0; wR < filterHeight; ++wR) {
@@ -7029,23 +9278,7 @@ var MathBackendCPU = (function () {
                 }
             }
         }
-        return dW;
-    };
-    MathBackendCPU.prototype.conv2dDerBias = function (dy) {
-        var _a = dy.shape, batchSize = _a[0], numRows = _a[1], numCols = _a[2], outDepth = _a[3];
-        var values = new Float32Array(outDepth);
-        for (var d2 = 0; d2 < outDepth; ++d2) {
-            var sum = 0;
-            for (var b = 0; b < batchSize; ++b) {
-                for (var r = 0; r < numRows; ++r) {
-                    for (var c = 0; c < numCols; ++c) {
-                        sum += dy.get(b, r, c, d2);
-                    }
-                }
-            }
-            values[d2] = sum;
-        }
-        return ndarray_1.Array1D.new(values);
+        return dW.toTensor();
     };
     MathBackendCPU.prototype.depthwiseConv2D = function (x, filter, convInfo) {
         var filterHeight = convInfo.filterHeight;
@@ -7053,7 +9286,7 @@ var MathBackendCPU = (function () {
         var padLeft = convInfo.padInfo.left;
         var padTop = convInfo.padInfo.top;
         var chMul = convInfo.outChannels / convInfo.inChannels;
-        var y = ndarray_1.Array4D.zeros(convInfo.outShape);
+        var y = ops.buffer(convInfo.outShape, x.dtype);
         for (var b = 0; b < convInfo.batchSize; ++b) {
             for (var d1 = 0; d1 < convInfo.inChannels; ++d1) {
                 for (var yR = 0; yR < convInfo.outHeight; ++yR) {
@@ -7081,37 +9314,72 @@ var MathBackendCPU = (function () {
                 }
             }
         }
-        return y;
+        return y.toTensor();
     };
     MathBackendCPU.prototype.tile = function (x, reps) {
         var newShape = new Array(x.rank);
         for (var i = 0; i < newShape.length; i++) {
             newShape[i] = x.shape[i] * reps[i];
         }
-        var dtype;
-        if (x.dtype === 'float32') {
-            dtype = Float32Array;
-        }
-        else if (x.dtype === 'int32') {
-            dtype = Int32Array;
-        }
-        else if (x.dtype === 'bool') {
-            dtype = Uint8Array;
-        }
-        else {
-            throw new Error("Dtype " + x.dtype + " not supported for tile");
-        }
-        var resultValues = new dtype(util.sizeFromShape(newShape));
-        var result = ndarray_1.NDArray.make(newShape, { values: resultValues }, x.dtype);
+        var result = ops.buffer(newShape, x.dtype);
         var values = x.dataSync();
-        for (var i = 0; i < result.size; ++i) {
+        for (var i = 0; i < result.values.length; ++i) {
             var newLoc = result.indexToLoc(i);
             var originalLoc = new Array(x.rank);
             for (var i_1 = 0; i_1 < originalLoc.length; i_1++) {
                 originalLoc[i_1] = newLoc[i_1] % x.shape[i_1];
             }
             var originalIndex = x.locToIndex(originalLoc);
-            resultValues[i] = values[originalIndex];
+            result.values[i] = values[originalIndex];
+        }
+        return result.toTensor();
+    };
+    MathBackendCPU.prototype.pad1D = function (x, paddings, constantValue) {
+        var leftPadding = paddings[0];
+        var rightPadding = paddings[1];
+        var values = x.dataSync();
+        var result = ops.zeros([leftPadding + values.length + rightPadding], x.dtype);
+        var newValues = result.dataSync();
+        var z = 0;
+        for (var i = 0; i < newValues.length; i++) {
+            if (i >= leftPadding && i < leftPadding + values.length) {
+                newValues[i] = values[z++];
+            }
+            else {
+                newValues[i] = constantValue;
+            }
+        }
+        return result;
+    };
+    MathBackendCPU.prototype.pad2D = function (x, paddings, constantValue) {
+        var topPadding = paddings[0][0];
+        var bottomPadding = paddings[0][1];
+        var leftPadding = paddings[1][0];
+        var rightPadding = paddings[1][1];
+        var newShape = [
+            topPadding + x.shape[0] + bottomPadding,
+            leftPadding + x.shape[1] + rightPadding
+        ];
+        var result = ops.zeros(newShape, x.dtype);
+        var newValues = result.dataSync();
+        var values = x.dataSync();
+        var z = 0;
+        for (var i = 0; i < newShape[0]; i++) {
+            var rangeStart = -1;
+            var rangeEnd = -1;
+            if (i >= topPadding && i < newShape[0] - bottomPadding) {
+                rangeStart = i * newShape[1] + leftPadding;
+                rangeEnd = rangeStart + x.shape[1] - 1;
+            }
+            for (var j = 0; j < newShape[1]; j++) {
+                var v = i * newShape[1] + j;
+                if (v >= rangeStart && v <= rangeEnd) {
+                    newValues[v] = values[z++];
+                }
+                else {
+                    newValues[v] = constantValue;
+                }
+            }
         }
         return result;
     };
@@ -7122,7 +9390,7 @@ var MathBackendCPU = (function () {
         }
         var resultValues = new Float32Array(x.size);
         var values = x.dataSync();
-        var result = ndarray_1.NDArray.make(newShape, { values: resultValues });
+        var result = tensor_1.Tensor.make(newShape, { values: resultValues });
         for (var i = 0; i < x.size; ++i) {
             var loc = x.indexToLoc(i);
             var newLoc = new Array(loc.length);
@@ -7134,12 +9402,28 @@ var MathBackendCPU = (function () {
         }
         return result;
     };
+    MathBackendCPU.prototype.gather = function (x, indices, axis) {
+        var newShape = x.shape.slice();
+        var indicesValues = indices.dataSync();
+        newShape[axis] = indicesValues.length;
+        var result = ops.zeros(newShape, x.dtype);
+        var values = x.dataSync();
+        var resultValues = result.dataSync();
+        for (var i = 0; i < result.size; ++i) {
+            var newLoc = result.indexToLoc(i);
+            var originalLoc = newLoc.slice();
+            originalLoc[axis] = indicesValues[newLoc[axis]];
+            var originalIndex = x.locToIndex(originalLoc);
+            resultValues[i] = values[originalIndex];
+        }
+        return result;
+    };
     MathBackendCPU.prototype.pool = function (x, convInfo, poolType) {
         var strideHeight = convInfo.strideHeight;
         var strideWidth = convInfo.strideWidth;
         var filterHeight = convInfo.filterHeight;
         var filterWidth = convInfo.filterWidth;
-        var y = ndarray_1.Array4D.zeros(convInfo.outShape);
+        var y = ops.buffer(convInfo.outShape, 'float32');
         var padTop = convInfo.padInfo.top;
         var padLeft = convInfo.padInfo.left;
         for (var b = 0; b < convInfo.batchSize; ++b) {
@@ -7180,13 +9464,13 @@ var MathBackendCPU = (function () {
                 }
             }
         }
-        return y;
+        return y.toTensor();
     };
     MathBackendCPU.prototype.maxPool = function (x, convInfo) {
         return this.pool(x, convInfo, 'max');
     };
     MathBackendCPU.prototype.maxPoolPositions = function (x, convInfo) {
-        var maxPositions = ndarray_1.Array4D.zeros(convInfo.outShape);
+        var maxPositions = ops.buffer(convInfo.outShape, 'int32');
         var strideHeight = convInfo.strideHeight;
         var strideWidth = convInfo.strideWidth;
         var filterHeight = convInfo.filterHeight;
@@ -7221,7 +9505,7 @@ var MathBackendCPU = (function () {
                 }
             }
         }
-        return maxPositions;
+        return maxPositions.toTensor();
     };
     MathBackendCPU.prototype.maxPoolBackprop = function (dy, x, convInfo) {
         var maxPositions = this.maxPoolPositions(x, convInfo);
@@ -7231,7 +9515,7 @@ var MathBackendCPU = (function () {
         var filterWidth = convInfo.filterWidth;
         var padLeft = filterWidth - 1 - convInfo.padInfo.left;
         var padTop = filterHeight - 1 - convInfo.padInfo.top;
-        var dx = ndarray_1.Array4D.zeros(x.shape);
+        var dx = ops.buffer(x.shape, 'float32');
         for (var b = 0; b < convInfo.batchSize; ++b) {
             for (var d = 0; d < convInfo.inChannels; ++d) {
                 for (var dxR = 0; dxR < convInfo.inHeight; ++dxR) {
@@ -7267,80 +9551,90 @@ var MathBackendCPU = (function () {
                 }
             }
         }
-        return dx;
+        return dx.toTensor();
+    };
+    MathBackendCPU.prototype.avgPoolBackprop = function (dy, x, convInfo) {
+        var strideHeight = convInfo.strideHeight;
+        var strideWidth = convInfo.strideWidth;
+        var filterHeight = convInfo.filterHeight;
+        var filterWidth = convInfo.filterWidth;
+        var padLeft = filterWidth - 1 - convInfo.padInfo.left;
+        var padTop = filterHeight - 1 - convInfo.padInfo.top;
+        var dx = ops.buffer(x.shape, 'float32');
+        var avgMultiplier = 1 / (filterHeight * filterWidth);
+        for (var b = 0; b < convInfo.batchSize; ++b) {
+            for (var d = 0; d < convInfo.inChannels; ++d) {
+                for (var dxR = 0; dxR < convInfo.inHeight; ++dxR) {
+                    for (var dxC = 0; dxC < convInfo.inWidth; ++dxC) {
+                        var dyRCorner = dxR - padTop;
+                        var dyCCorner = dxC - padLeft;
+                        var dotProd = 0;
+                        for (var wR = 0; wR < filterHeight; ++wR) {
+                            var dyR = (dyRCorner + wR) / strideHeight;
+                            if (dyR < 0 || dyR >= convInfo.outHeight ||
+                                Math.floor(dyR) !== dyR) {
+                                continue;
+                            }
+                            for (var wC = 0; wC < filterWidth; ++wC) {
+                                var dyC = (dyCCorner + wC) / strideWidth;
+                                if (dyC < 0 || dyC >= convInfo.outWidth ||
+                                    Math.floor(dyC) !== dyC) {
+                                    continue;
+                                }
+                                var pixel = dy.get(b, dyR, dyC, d);
+                                dotProd += pixel;
+                            }
+                        }
+                        dx.set(dotProd * avgMultiplier, b, dxR, dxC, d);
+                    }
+                }
+            }
+        }
+        return dx.toTensor();
     };
     MathBackendCPU.prototype.minPool = function (x, convInfo) {
         return this.pool(x, convInfo, 'min');
     };
     MathBackendCPU.prototype.avgPool = function (x, convInfo) {
-        return this.pool(x, convInfo, 'avg');
+        return this.pool(x, convInfo, 'avg').toFloat();
     };
-    MathBackendCPU.prototype.resizeBilinear3D = function (x, newShape2D, alignCorners) {
-        var output = ndarray_1.Array3D.zeros([newShape2D[0], newShape2D[1], x.shape[2]]);
-        var effectiveInputSize = alignCorners ? [x.shape[0] - 1, x.shape[1] - 1, x.shape[2]] : x.shape;
-        var effectiveOutputSize = alignCorners ?
-            [output.shape[0] - 1, output.shape[1] - 1, output.shape[2]] :
-            output.shape;
-        for (var r = 0; r < output.shape[0]; r++) {
-            for (var c = 0; c < output.shape[1]; c++) {
-                for (var d = 0; d < output.shape[2]; d++) {
-                    var sourceFracRow = (effectiveInputSize[0]) * r / (effectiveOutputSize[0]);
-                    var sourceFracCol = (effectiveInputSize[1]) * c / (effectiveOutputSize[1]);
-                    var sourceRowFloor = Math.floor(sourceFracRow);
-                    var sourceRowCeil = Math.min(x.shape[0] - 1, Math.ceil(sourceFracRow));
-                    var sourceColFloor = Math.floor(sourceFracCol);
-                    var sourceColCeil = Math.min(x.shape[1] - 1, Math.ceil(sourceFracCol));
-                    var topLeft = x.get(sourceRowFloor, sourceColFloor, d);
-                    var bottomLeft = x.get(sourceRowCeil, sourceColFloor, d);
-                    var topRight = x.get(sourceRowFloor, sourceColCeil, d);
-                    var bottomRight = x.get(sourceRowCeil, sourceColCeil, d);
-                    var rowFrac = sourceFracRow - sourceRowFloor;
-                    var colFrac = sourceFracCol - sourceColFloor;
-                    var top_1 = topLeft + (topRight - topLeft) * colFrac;
-                    var bottom = bottomLeft + (bottomRight - bottomLeft) * colFrac;
-                    var newValue = top_1 + (bottom - top_1) * rowFrac;
-                    output.set(newValue, r, c, d);
+    MathBackendCPU.prototype.resizeBilinear = function (x, newHeight, newWidth, alignCorners) {
+        var _a = x.shape, batch = _a[0], oldHeight = _a[1], oldWidth = _a[2], numChannels = _a[3];
+        var output = ops.buffer([batch, newHeight, newWidth, numChannels], x.dtype);
+        var effectiveInputSize = alignCorners ? [oldHeight - 1, oldWidth - 1] : [oldHeight, oldWidth];
+        var effectiveOutputSize = alignCorners ? [newHeight - 1, newWidth - 1] : [newHeight, newWidth];
+        for (var b = 0; b < batch; b++) {
+            for (var r = 0; r < newHeight; r++) {
+                for (var c = 0; c < newWidth; c++) {
+                    for (var d = 0; d < numChannels; d++) {
+                        var sourceFracRow = (effectiveInputSize[0]) * r / (effectiveOutputSize[0]);
+                        var sourceFracCol = (effectiveInputSize[1]) * c / (effectiveOutputSize[1]);
+                        var sourceRowFloor = Math.floor(sourceFracRow);
+                        var sourceRowCeil = Math.min(oldHeight - 1, Math.ceil(sourceFracRow));
+                        var sourceColFloor = Math.floor(sourceFracCol);
+                        var sourceColCeil = Math.min(oldWidth - 1, Math.ceil(sourceFracCol));
+                        var topLeft = x.get(b, sourceRowFloor, sourceColFloor, d);
+                        var bottomLeft = x.get(b, sourceRowCeil, sourceColFloor, d);
+                        var topRight = x.get(b, sourceRowFloor, sourceColCeil, d);
+                        var bottomRight = x.get(b, sourceRowCeil, sourceColCeil, d);
+                        var rowFrac = sourceFracRow - sourceRowFloor;
+                        var colFrac = sourceFracCol - sourceColFloor;
+                        var top_1 = topLeft + (topRight - topLeft) * colFrac;
+                        var bottom = bottomLeft + (bottomRight - bottomLeft) * colFrac;
+                        var newValue = top_1 + (bottom - top_1) * rowFrac;
+                        output.set(newValue, b, r, c, d);
+                    }
                 }
             }
         }
-        return output;
-    };
-    MathBackendCPU.prototype.batchNormalization2D = function (x, mean, variance, varianceEpsilon, scale, offset) {
-        var xValues = x.dataSync();
-        var meanValues = mean.dataSync();
-        var varianceValues = variance.dataSync();
-        var scaleValues = scale ? scale.dataSync() : [1];
-        var offsetValues = offset ? offset.dataSync() : [0];
-        var outValues = new Float32Array(xValues.length);
-        for (var i = 0; i < xValues.length; i++) {
-            outValues[i] = offsetValues[i % offsetValues.length] +
-                (xValues[i] - meanValues[i % meanValues.length]) *
-                    scaleValues[i % scaleValues.length] /
-                    Math.sqrt(varianceValues[i % varianceValues.length] + varianceEpsilon);
-        }
-        return ndarray_1.Array2D.new(x.shape, outValues);
-    };
-    MathBackendCPU.prototype.batchNormalization3D = function (x, mean, variance, varianceEpsilon, scale, offset) {
-        var xValues = x.dataSync();
-        var meanValues = mean.dataSync();
-        var varianceValues = variance.dataSync();
-        var scaleValues = scale ? scale.dataSync() : [1];
-        var offsetValues = offset ? offset.dataSync() : [0];
-        var outValues = new Float32Array(xValues.length);
-        for (var i = 0; i < xValues.length; i++) {
-            outValues[i] = offsetValues[i % offsetValues.length] +
-                (xValues[i] - meanValues[i % meanValues.length]) *
-                    scaleValues[i % scaleValues.length] /
-                    Math.sqrt(varianceValues[i % varianceValues.length] + varianceEpsilon);
-        }
-        return ndarray_1.Array3D.new(x.shape, outValues);
+        return output.toTensor();
     };
     MathBackendCPU.prototype.batchNormalization4D = function (x, mean, variance, varianceEpsilon, scale, offset) {
-        var xValues = x.getValues();
-        var meanValues = mean.getValues();
-        var varianceValues = variance.getValues();
-        var scaleValues = scale ? scale.getValues() : new Float32Array([1]);
-        var offsetValues = offset ? offset.getValues() : new Float32Array([0]);
+        var xValues = x.dataSync();
+        var meanValues = mean.dataSync();
+        var varianceValues = variance.dataSync();
+        var scaleValues = scale ? scale.dataSync() : new Float32Array([1]);
+        var offsetValues = offset ? offset.dataSync() : new Float32Array([0]);
         var outValues = new Float32Array(xValues.length);
         for (var i = 0; i < xValues.length; i++) {
             outValues[i] = offsetValues[i % offsetValues.length] +
@@ -7348,12 +9642,50 @@ var MathBackendCPU = (function () {
                     scaleValues[i % scaleValues.length] /
                     Math.sqrt(varianceValues[i % varianceValues.length] + varianceEpsilon);
         }
-        return ndarray_1.Array4D.new(x.shape, outValues);
+        return ops_1.tensor4d(outValues, x.shape);
+    };
+    MathBackendCPU.prototype.localResponseNormalization4D = function (x, radius, bias, alpha, beta, normRegion) {
+        var output = ops.buffer(x.shape, 'float32');
+        var rad = radius;
+        var maxW = output.shape[1] - 1;
+        var maxH = output.shape[2] - 1;
+        var maxD = output.shape[3] - 1;
+        var sumAcrossChannels = function (b, r, c, d) {
+            var sum = 0.0;
+            for (var j = Math.max(0, d - rad); j <= Math.min(d + rad, maxD); j++) {
+                var z = x.get(b, r, c, j);
+                sum += z * z;
+            }
+            return sum;
+        };
+        var sumWithinChannel = function (b, r, c, d) {
+            var sum = 0.0;
+            for (var u = Math.max(0, r - rad); u <= Math.min(r + rad, maxW); u++) {
+                for (var v = Math.max(0, c - rad); v <= Math.min(c + rad, maxH); v++) {
+                    sum += Math.pow(x.get(b, u, v, d), 2);
+                }
+            }
+            return sum;
+        };
+        for (var b = 0; b < output.shape[0]; b++) {
+            for (var r = 0; r <= output.shape[1]; r++) {
+                for (var c = 0; c < output.shape[2]; c++) {
+                    for (var d = 0; d < output.shape[3]; d++) {
+                        var sum = normRegion === 'withinChannel' ?
+                            sumWithinChannel(b, r, c, d) :
+                            sumAcrossChannels(b, r, c, d);
+                        var val = x.get(b, r, c, d) * Math.pow(bias + alpha * sum, -beta);
+                        output.set(val, b, r, c, d);
+                    }
+                }
+            }
+        }
+        return output.toTensor();
     };
     MathBackendCPU.prototype.multinomial = function (probabilities, numSamples, seed) {
         var batchSize = probabilities.shape[0];
         var numEvents = probabilities.shape[1];
-        var res = ndarray_1.Array2D.zeros([batchSize, numSamples], 'int32');
+        var res = ops.zeros([batchSize, numSamples], 'int32');
         var resVals = res.dataSync();
         var probVals = probabilities.dataSync();
         for (var b = 0; b < batchSize; ++b) {
@@ -7384,12 +9716,11 @@ var MathBackendCPU = (function () {
         for (var event_3 = 0; event_3 < indices.size; ++event_3) {
             res[event_3 * depth + indices.get(event_3)] = onValue;
         }
-        return ndarray_1.Array2D.new([indices.size, depth], res);
+        return ops.tensor2d(res, [indices.size, depth]);
     };
     MathBackendCPU.prototype.broadcastedBinaryOp = function (a, b, dtype, op) {
         var newShape = broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
-        var result = ndarray_1.NDArray.zeros(newShape, dtype);
-        var newValues = result.dataSync();
+        var result = ops.buffer(newShape, dtype);
         var aValues = a.dataSync();
         var bValues = b.dataSync();
         var aBroadcastDims = broadcast_util.getBroadcastDims(a.shape, newShape);
@@ -7402,13 +9733,14 @@ var MathBackendCPU = (function () {
             var bLoc = loc.slice(-b.rank);
             bBroadcastDims.forEach(function (d) { return bLoc[d] = 0; });
             var bIndex = b.locToIndex(bLoc);
-            newValues[i] = op(aValues[aIndex], bValues[bIndex]);
+            result.values[i] = op(aValues[aIndex], bValues[bIndex]);
         };
-        for (var i = 0; i < newValues.length; ++i) {
+        for (var i = 0; i < result.values.length; ++i) {
             _loop_1(i);
         }
-        return result;
+        return result.toTensor();
     };
+    MathBackendCPU.prototype.dispose = function () { };
     return MathBackendCPU;
 }());
 exports.MathBackendCPU = MathBackendCPU;
@@ -7418,202 +9750,16 @@ var NDArrayMathCPU = (function (_super) {
     function NDArrayMathCPU(safeMode) {
         if (safeMode === void 0) { safeMode = false; }
         var _this = this;
-        console.warn('new NDArrayMathCPU() is deprecated. Please use the global ' +
-            'dl.ENV.math. In rare cases, to construct your own NDArrayMath ' +
-            'that runs on CPU, use math = new NDArrayMath(\'cpu\', safeMode); ' +
-            'and make sure to set it as global: dl.ENV.setMath(math);');
+        console.warn('new NDArrayMathCPU() is deprecated. Please use ' +
+            'dl.setBackend(\'cpu\').');
         _this = _super.call(this, 'cpu', safeMode) || this;
-        environment_1.ENV.setMath(_this);
         return _this;
     }
     return NDArrayMathCPU;
 }(math_1.NDArrayMath));
 exports.NDArrayMathCPU = NDArrayMathCPU;
 
-},{"../../environment":15,"../../util":100,"../broadcast_util":89,"../concat_util":90,"../math":93,"../ndarray":94,"../types":98,"./../axis_util":54,"./types/matmul":60,"seedrandom":102}],56:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var util = require("../../util");
-var ndarray_1 = require("../ndarray");
-var kernel_registry = require("./kernel_registry");
-var tape_util = require("./tape_util");
-var BackendEngine = (function () {
-    function BackendEngine(backend, safeMode) {
-        this.backend = backend;
-        this.safeMode = safeMode;
-        this.nextTapeNodeId = 0;
-        this.gradientScopeCount = 0;
-        this.debugMode = false;
-        this.activeScope = { keep: [], track: [] };
-        this.scopeStack = [this.activeScope];
-    }
-    BackendEngine.prototype.enableDebugMode = function () {
-        this.debugMode = true;
-    };
-    BackendEngine.prototype.executeKernel = function (kernelName, config, grad) {
-        var _this = this;
-        var kernelFn = function () {
-            return kernel_registry.executeKernel(_this.backend, kernelName, config);
-        };
-        var start;
-        if (this.debugMode) {
-            start = performance.now();
-        }
-        var result = kernelFn();
-        if (this.debugMode) {
-            var vals = result.dataSync();
-            var time = util.rightPad(performance.now() - start + "ms", 9);
-            var paddedName = util.rightPad(kernelName, 25);
-            var rank = result.rank;
-            var size = result.size;
-            var shape = util.rightPad(result.shape.toString(), 14);
-            console.log("%c" + paddedName + "\t%c" + time + "\t%c" + rank + "D " + shape + "\t%c" + size, 'font-weight:bold', 'color:red', 'color:blue', 'color: orange');
-            util.checkForNaN(vals, result.dtype, name);
-        }
-        if (this.activeTape != null) {
-            config = tape_util.stripUndefinedInputsFromInputConfig(config);
-            var evaluatedNode = {
-                id: this.nextTapeNodeId++,
-                type: 'kernel',
-                name: "kernel: " + kernelName,
-                kernel: kernelName,
-                inputAndArgs: config,
-                output: result,
-                gradient: grad
-            };
-            this.activeTape.push(evaluatedNode);
-        }
-        return result;
-    };
-    BackendEngine.prototype.gradients = function (f, xs, returnValue) {
-        var _this = this;
-        var gradientsMode = true;
-        var result = this.scope('gradients', function () {
-            var y = f();
-            if (y.rank !== 0) {
-                throw new Error("Cannot compute gradient of non-scalar y output. " +
-                    ("Got y with rank " + y.rank));
-            }
-            var gradients = _this.gradientWrt(y, xs);
-            if (returnValue) {
-                return [y].concat(gradients);
-            }
-            else {
-                return gradients;
-            }
-        }, gradientsMode);
-        if (returnValue) {
-            return { value: result[0], gradients: result.slice(1) };
-        }
-        else {
-            return result;
-        }
-    };
-    BackendEngine.prototype.gradientWrt = function (y, xs) {
-        var filteredTape = tape_util.getFilteredNodesXToY(this.activeTape, xs, y);
-        if (filteredTape.length === 0) {
-            throw new Error("Cannot compute gradient: y is not a function of xs.");
-        }
-        var arrayAccumulatedGradientMap = {};
-        arrayAccumulatedGradientMap[y.id] = ndarray_1.Scalar.new(1);
-        tape_util.backpropagateGradients(arrayAccumulatedGradientMap, filteredTape);
-        var gradients = [];
-        for (var i = 0; i < xs.length; i++) {
-            gradients.push(arrayAccumulatedGradientMap[xs[i].id]);
-        }
-        return gradients;
-    };
-    BackendEngine.prototype.scope = function (name, scopeFn, gradientsMode) {
-        var _this = this;
-        this.startScope(gradientsMode);
-        var keepFn = function (ndarray) { return _this.keep(ndarray); };
-        var trackFn = function (ndarray) { return ndarray; };
-        var result = scopeFn(keepFn, trackFn);
-        if (result instanceof Promise) {
-            result.then(function (r) { return _this.endScope(r, gradientsMode); });
-            return result;
-        }
-        else {
-            this.endScope(result, gradientsMode);
-            return result;
-        }
-    };
-    BackendEngine.prototype.startScope = function (gradientsMode) {
-        if (gradientsMode && this.gradientScopeCount === 0) {
-            this.activeTape = [];
-        }
-        if (gradientsMode) {
-            this.gradientScopeCount++;
-        }
-        var newScopeArrays = { keep: [], track: [] };
-        this.scopeStack.push(newScopeArrays);
-        this.activeScope = newScopeArrays;
-    };
-    BackendEngine.prototype.endScope = function (result, gradientsMode) {
-        var _this = this;
-        var arraysToKeep = this.activeScope.keep;
-        var arraysToTrackInParent = tape_util.extractNDArraysFromScopeResult(result);
-        arraysToKeep = arraysToKeep.concat(arraysToTrackInParent);
-        for (var i = 0; i < this.activeScope.track.length; i++) {
-            var ndarray = this.activeScope.track[i];
-            if (util.isNDArrayInList(ndarray, arraysToKeep)) {
-                continue;
-            }
-            if (this.activeTape != null) {
-                arraysToTrackInParent.push(ndarray);
-            }
-            else {
-                ndarray.dispose();
-            }
-        }
-        this.scopeStack.pop();
-        this.activeScope = this.scopeStack.length === 0 ?
-            null :
-            this.scopeStack[this.scopeStack.length - 1];
-        arraysToTrackInParent.forEach(function (ndarray) {
-            if (!util.isNDArrayInList(ndarray, _this.activeScope.keep)) {
-                _this.track(ndarray);
-            }
-        });
-        if (gradientsMode) {
-            this.gradientScopeCount--;
-            if (this.gradientScopeCount === 0) {
-                this.activeTape = null;
-            }
-        }
-    };
-    BackendEngine.prototype.keep = function (result) {
-        if (this.scopeStack.length === 1) {
-            if (this.safeMode) {
-                throw new Error('You are using math in safe mode. Enclose all ' +
-                    'math.method() calls inside a scope: ' +
-                    'math.scope(() => {math.method();...}) to avoid memory ' +
-                    'leaks.');
-            }
-        }
-        this.activeScope.keep.push(result);
-        return result;
-    };
-    BackendEngine.prototype.track = function (result) {
-        if (this.scopeStack.length === 1) {
-            if (this.safeMode) {
-                throw new Error('You are using math in safe mode. Enclose all ' +
-                    'math.method() calls inside a scope: ' +
-                    'math.scope(() => {math.method();...}) to avoid memory ' +
-                    'leaks.');
-            }
-        }
-        this.activeScope.track.push(result);
-        return result;
-    };
-    BackendEngine.prototype.getBackend = function () {
-        return this.backend;
-    };
-    return BackendEngine;
-}());
-exports.BackendEngine = BackendEngine;
-
-},{"../../util":100,"../ndarray":94,"./kernel_registry":58,"./tape_util":59}],57:[function(require,module,exports){
+},{"../environment":34,"../math":105,"../ops/axis_util":107,"../ops/broadcast_util":110,"../ops/concat_util":113,"../ops/ops":123,"../ops/selu_util":129,"../tensor":146,"../types":150,"../util":151,"seedrandom":153}],69:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || (function () {
     var extendStatics = Object.setPrototypeOf ||
@@ -7661,15 +9807,15 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-var environment_1 = require("../../environment");
-var util = require("../../util");
-var axis_util = require("../axis_util");
+var environment_1 = require("../environment");
 var math_1 = require("../math");
-var ndarray_1 = require("../ndarray");
-var reduce_util = require("../reduce_util");
+var axis_util = require("../ops/axis_util");
+var reduce_util = require("../ops/reduce_util");
+var tensor_1 = require("../tensor");
 var types = require("../types");
-var types_1 = require("../types");
+var util = require("../util");
 var argminmax_gpu_1 = require("./webgl/argminmax_gpu");
+var avg_pool_backprop_gpu_1 = require("./webgl/avg_pool_backprop_gpu");
 var batchnorm_gpu_1 = require("./webgl/batchnorm_gpu");
 var binaryop_gpu = require("./webgl/binaryop_gpu");
 var binaryop_gpu_1 = require("./webgl/binaryop_gpu");
@@ -7678,17 +9824,21 @@ var concat_gpu_1 = require("./webgl/concat_gpu");
 var conv_backprop_gpu_1 = require("./webgl/conv_backprop_gpu");
 var conv_gpu_1 = require("./webgl/conv_gpu");
 var conv_gpu_depthwise_1 = require("./webgl/conv_gpu_depthwise");
-var copy_gpu_1 = require("./webgl/copy_gpu");
+var from_pixels_gpu_1 = require("./webgl/from_pixels_gpu");
+var gather_gpu_1 = require("./webgl/gather_gpu");
 var gpgpu_context_1 = require("./webgl/gpgpu_context");
 var gpgpu_math = require("./webgl/gpgpu_math");
-var gpgpu_util = require("./webgl/gpgpu_util");
+var logical_gpu_1 = require("./webgl/logical_gpu");
+var lrn_gpu_1 = require("./webgl/lrn_gpu");
 var max_pool_backprop_gpu_1 = require("./webgl/max_pool_backprop_gpu");
 var mulmat_gpu_1 = require("./webgl/mulmat_gpu");
 var multinomial_gpu_1 = require("./webgl/multinomial_gpu");
 var onehot_gpu_1 = require("./webgl/onehot_gpu");
+var pad_gpu_1 = require("./webgl/pad_gpu");
 var pool_gpu_1 = require("./webgl/pool_gpu");
 var reduce_gpu_1 = require("./webgl/reduce_gpu");
 var resize_bilinear_gpu_1 = require("./webgl/resize_bilinear_gpu");
+var reverse_gpu_1 = require("./webgl/reverse_gpu");
 var slice_gpu_1 = require("./webgl/slice_gpu");
 var tex_util_1 = require("./webgl/tex_util");
 var texture_manager_1 = require("./webgl/texture_manager");
@@ -7702,152 +9852,222 @@ var MathBackendWebGL = (function () {
         if (delayedStorage === void 0) { delayedStorage = true; }
         this.gpgpu = gpgpu;
         this.delayedStorage = delayedStorage;
-        this.texData = {};
+        this.texData = new WeakMap();
+        this.uploadWaitMs = 0;
+        this.downloadWaitMs = 0;
         this.binaryCache = {};
+        this.disposed = false;
         if (environment_1.ENV.get('WEBGL_VERSION') < 1) {
             throw new Error('WebGL is not supported on this device');
         }
         if (gpgpu == null) {
-            var gl = gpgpu_util.createWebGLContext();
-            this.gpgpu = new gpgpu_context_1.GPGPUContext(gl);
+            this.gpgpu = new gpgpu_context_1.GPGPUContext();
             this.gpgpuCreatedLocally = true;
         }
         else {
             this.gpgpuCreatedLocally = false;
         }
+        if (typeof document !== 'undefined') {
+            this.canvas = document.createElement('canvas');
+        }
         this.textureManager = new texture_manager_1.TextureManager(this.gpgpu);
     }
-    MathBackendWebGL.prototype.writePixels = function (id, pixels, numChannels) {
-        var texShape = [pixels.height, pixels.width];
-        var texture = id in this.texData ?
-            this.texData[id].texture :
-            this.textureManager.acquireTexture(texShape);
-        this.texData[id] = {
+    MathBackendWebGL.prototype.register = function (dataId, shape, dtype) {
+        if (this.texData.has(dataId)) {
+            throw new Error('Data buffer is already registered');
+        }
+        this.texData.set(dataId, {
+            shape: shape,
+            dtype: dtype,
             values: null,
-            texture: texture,
-            textureType: tex_util_1.TextureType.RGBA_COLOR,
-            texShape: texShape,
-            numChannels: numChannels,
-            dtype: 'int32'
-        };
-        this.gpgpu.uploadPixelDataToTexture(texture, pixels);
+            texture: null,
+            texShape: null,
+            texType: tex_util_1.TextureType.FLOAT
+        });
     };
-    MathBackendWebGL.prototype.write = function (id, values, dtype, shape) {
+    MathBackendWebGL.prototype.fromPixels = function (pixels, numChannels) {
+        if (pixels == null) {
+            throw new Error('MathBackendWebGL.writePixels(): pixels can not be null');
+        }
+        var texShape = [pixels.height, pixels.width];
+        var outShape = [pixels.height, pixels.width, numChannels];
+        if (pixels instanceof HTMLVideoElement) {
+            if (this.canvas == null) {
+                throw new Error('Can\'t read pixels from HTMLImageElement outside ' +
+                    'the browser.');
+            }
+            this.canvas.width = pixels.width;
+            this.canvas.height = pixels.height;
+            this.canvas.getContext('2d').drawImage(pixels, 0, 0, pixels.width, pixels.height);
+            pixels = this.canvas;
+        }
+        var tempPixelArray = tensor_1.Tensor.make(texShape, {}, 'int32');
+        this.texData.get(tempPixelArray.dataId).texType = tex_util_1.TextureType.UNSIGNED_BYTE;
+        this.gpgpu.uploadPixelDataToTexture(this.getTexture(tempPixelArray.dataId), pixels);
+        var program = new from_pixels_gpu_1.FromPixelsProgram(outShape);
+        var res = this.compileAndRun(program, [tempPixelArray]);
+        tempPixelArray.dispose();
+        return res;
+    };
+    MathBackendWebGL.prototype.write = function (dataId, values) {
         if (values == null) {
             throw new Error('MathBackendWebGL.write(): values can not be null');
         }
-        var _a = this.getOrMakeTexData(id, shape, dtype), texture = _a.texture, texShape = _a.texShape;
+        this.throwIfNoData(dataId);
+        var texData = this.texData.get(dataId);
+        var texture = texData.texture, texShape = texData.texShape, texType = texData.texType;
         if (texture != null) {
-            this.textureManager.releaseTexture(texture, texShape);
-            this.texData[id].texture = null;
+            this.textureManager.releaseTexture(texture, texShape, texType);
+            texData.texture = null;
+            texData.texShape = null;
         }
-        this.texData[id].values = values;
+        texData.values = values;
         if (!this.delayedStorage) {
-            this.uploadToGPU(id);
+            this.uploadToGPU(dataId);
         }
     };
-    MathBackendWebGL.prototype.getOrMakeTexData = function (id, shape, dtype) {
-        if (!(id in this.texData)) {
-            var texShape = webgl_util.getTextureShapeFromLogicalShape(this.gpgpu.gl, shape);
-            var textureType = tex_util_1.TextureType.DEFAULT;
-            this.texData[id] =
-                { texture: null, values: null, textureType: textureType, texShape: texShape, dtype: dtype };
-        }
-        return this.texData[id];
-    };
-    MathBackendWebGL.prototype.readSync = function (id) {
-        this.throwIfNoData(id);
-        var _a = this.texData[id], texture = _a.texture, values = _a.values, textureType = _a.textureType, texShape = _a.texShape, numChannels = _a.numChannels;
+    MathBackendWebGL.prototype.readSync = function (dataId) {
+        this.throwIfNoData(dataId);
+        var texData = this.texData.get(dataId);
+        var texture = texData.texture, values = texData.values, texShape = texData.texShape;
         if (values != null) {
-            this.cacheOnCPU(id);
+            this.cacheOnCPU(dataId);
             return values;
         }
-        var float32Values;
-        if (textureType === tex_util_1.TextureType.DEFAULT) {
-            float32Values = this.gpgpu.downloadMatrixFromTexture(texture, texShape[0], texShape[1]);
+        var shouldTimeProgram = this.activeTimers != null;
+        var start;
+        if (shouldTimeProgram) {
+            start = performance.now();
         }
-        else {
-            float32Values = this.gpgpu.downloadMatrixFromRGBAColorTexture(texture, texShape[0], texShape[1], numChannels);
+        var float32Values = this.gpgpu.downloadMatrixFromTexture(texture, texShape[0], texShape[1]);
+        if (shouldTimeProgram) {
+            this.downloadWaitMs += performance.now() - start;
         }
-        this.cacheOnCPU(id, float32Values);
-        return this.texData[id].values;
+        this.cacheOnCPU(dataId, float32Values);
+        return texData.values;
     };
-    MathBackendWebGL.prototype.read = function (id) {
+    MathBackendWebGL.prototype.read = function (dataId) {
         return __awaiter(this, void 0, void 0, function () {
-            var _a, texture, values, textureType, texShape, float32Values;
-            return __generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        this.throwIfNoData(id);
-                        _a = this.texData[id], texture = _a.texture, values = _a.values, textureType = _a.textureType, texShape = _a.texShape;
-                        if (values != null) {
-                            this.cacheOnCPU(id);
-                            return [2, values];
-                        }
-                        if (!(environment_1.ENV.get('WEBGL_GET_BUFFER_SUB_DATA_ASYNC_EXTENSION_ENABLED') &&
-                            textureType === tex_util_1.TextureType.DEFAULT)) return [3, 2];
-                        return [4, this.gpgpu.downloadMatrixFromTextureAsync(texture, texShape[0], texShape[1])];
-                    case 1:
-                        float32Values = _b.sent();
-                        this.cacheOnCPU(id, float32Values);
-                        return [2, this.texData[id].values];
-                    case 2:
-                        if (!environment_1.ENV.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_ENABLED')) {
-                            return [2, this.readSync(id)];
-                        }
-                        return [4, this.gpgpu.runQuery(function () { })];
-                    case 3:
-                        _b.sent();
-                        return [2, this.readSync(id)];
-                }
-            });
-        });
-    };
-    MathBackendWebGL.prototype.time = function (query) {
-        return __awaiter(this, void 0, void 0, function () {
-            var start, a;
+            var texData, texture, values, texShape, float32Values;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        if (!!environment_1.ENV.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_ENABLED')) return [3, 2];
-                        start = performance.now();
-                        a = query();
-                        return [4, a.data()];
+                        this.throwIfNoData(dataId);
+                        texData = this.texData.get(dataId);
+                        texture = texData.texture, values = texData.values, texShape = texData.texShape;
+                        if (values != null) {
+                            this.cacheOnCPU(dataId);
+                            return [2, values];
+                        }
+                        if (!environment_1.ENV.get('WEBGL_GET_BUFFER_SUB_DATA_ASYNC_EXTENSION_ENABLED')) return [3, 2];
+                        return [4, this.gpgpu.downloadMatrixFromTextureAsync(texture, texShape[0], texShape[1])];
                     case 1:
+                        float32Values = _a.sent();
+                        this.cacheOnCPU(dataId, float32Values);
+                        return [2, texData.values];
+                    case 2:
+                        if (environment_1.ENV.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_VERSION') === 0) {
+                            return [2, this.readSync(dataId)];
+                        }
+                        return [4, this.gpgpu.runQuery(function () { })];
+                    case 3:
                         _a.sent();
-                        return [2, performance.now() - start];
-                    case 2: return [2, this.gpgpu.runQuery(query)];
+                        return [2, this.readSync(dataId)];
                 }
             });
         });
     };
-    MathBackendWebGL.prototype.disposeData = function (id) {
-        if (id in this.texData) {
-            var _a = this.texData[id], texture = _a.texture, texShape = _a.texShape;
+    MathBackendWebGL.prototype.time = function (f) {
+        return __awaiter(this, void 0, void 0, function () {
+            var oldActiveTimers, newActiveTimers, outerMostTime, flattenedActiveTimers, kernelMs, res;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        oldActiveTimers = this.activeTimers;
+                        newActiveTimers = [];
+                        outerMostTime = false;
+                        if (this.programTimersStack == null) {
+                            this.programTimersStack = newActiveTimers;
+                            outerMostTime = true;
+                        }
+                        else {
+                            this.activeTimers.push(newActiveTimers);
+                        }
+                        this.activeTimers = newActiveTimers;
+                        f();
+                        flattenedActiveTimers = util.flatten(this.activeTimers);
+                        this.activeTimers = oldActiveTimers;
+                        if (outerMostTime) {
+                            this.programTimersStack = null;
+                        }
+                        return [4, Promise.all(flattenedActiveTimers).then(function (results) {
+                                var sum = 0;
+                                results.forEach(function (result) { return sum += result; });
+                                return sum;
+                            })];
+                    case 1:
+                        kernelMs = _a.sent();
+                        res = {
+                            uploadWaitMs: this.uploadWaitMs,
+                            downloadWaitMs: this.downloadWaitMs,
+                            kernelMs: kernelMs,
+                            wallMs: null
+                        };
+                        this.uploadWaitMs = 0;
+                        this.downloadWaitMs = 0;
+                        return [2, res];
+                }
+            });
+        });
+    };
+    MathBackendWebGL.prototype.memory = function () {
+        return { unreliable: false };
+    };
+    MathBackendWebGL.prototype.startTimer = function () {
+        if (environment_1.ENV.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_VERSION') > 0) {
+            return this.gpgpu.beginQuery();
+        }
+        return { startMs: performance.now(), endMs: null };
+    };
+    MathBackendWebGL.prototype.endTimer = function (query) {
+        if (environment_1.ENV.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_VERSION') > 0) {
+            this.gpgpu.endQuery();
+            return query;
+        }
+        query.endMs = performance.now();
+        return query;
+    };
+    MathBackendWebGL.prototype.getQueryTime = function (query) {
+        return __awaiter(this, void 0, void 0, function () {
+            var timerQuery;
+            return __generator(this, function (_a) {
+                if (environment_1.ENV.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_VERSION') > 0) {
+                    return [2, this.gpgpu.pollQueryTime(query)];
+                }
+                timerQuery = query;
+                return [2, timerQuery.endMs - timerQuery.startMs];
+            });
+        });
+    };
+    MathBackendWebGL.prototype.disposeData = function (dataId) {
+        if (this.texData.has(dataId)) {
+            var _a = this.texData.get(dataId), texture = _a.texture, texShape = _a.texShape, texType = _a.texType;
             if (texture != null) {
-                this.textureManager.releaseTexture(texture, texShape);
+                this.textureManager.releaseTexture(texture, texShape, texType);
             }
-            delete this.texData[id];
+            this.texData.delete(dataId);
         }
     };
-    MathBackendWebGL.prototype.getTexture = function (id) {
-        this.uploadToGPU(id);
-        return this.texData[id].texture;
+    MathBackendWebGL.prototype.getTexture = function (dataId) {
+        this.uploadToGPU(dataId);
+        return this.texData.get(dataId).texture;
     };
-    MathBackendWebGL.prototype.getTextureData = function (id) {
-        this.uploadToGPU(id);
-        return this.texData[id];
+    MathBackendWebGL.prototype.getTextureData = function (dataId) {
+        this.uploadToGPU(dataId);
+        return this.texData.get(dataId);
     };
     MathBackendWebGL.prototype.getGPGPUContext = function () {
         return this.gpgpu;
-    };
-    MathBackendWebGL.prototype.clone = function (x) {
-        this.throwIfNoData(x.id);
-        var texShape = this.texData[x.id].texShape;
-        var source = x.as2D(texShape[0], texShape[1]);
-        var output = this.makeOutputArray(texShape, x.dtype);
-        this.copy2D(source, [0, 0], texShape, output, [0, 0], texShape);
-        return output.reshape(x.shape);
     };
     MathBackendWebGL.prototype.slice1D = function (x, begin, size) {
         var program = new slice_gpu_1.SliceProgram([size]);
@@ -7869,69 +10089,26 @@ var MathBackendWebGL = (function () {
         var customSetup = program.getCustomSetupFunc(begin);
         return this.compileAndRun(program, [x], null, customSetup);
     };
-    MathBackendWebGL.prototype.copy2D = function (source, sourceBeginRowCol, sourceSizeRowCol, dest, destBeginRowCol, destSizeRowCol) {
-        var program = new copy_gpu_1.Copy2DProgram(sourceSizeRowCol[1], destSizeRowCol[1]);
-        var customSetup = program.getCustomSetupFunc(sourceBeginRowCol, destBeginRowCol, destSizeRowCol);
-        this.compileAndRun(program, [source], dest, customSetup);
+    MathBackendWebGL.prototype.reverse4D = function (x, axis) {
+        var program = new reverse_gpu_1.ReverseProgram(x.shape, axis);
+        return this.compileAndRun(program, [x]);
     };
-    MathBackendWebGL.prototype.concat1D = function (a, b) {
-        var program = new concat_gpu_1.ConcatProgram(a.shape, b.shape, 0);
-        return this.compileAndRun(program, [a, b]);
-    };
-    MathBackendWebGL.prototype.concat2D = function (a, b, axis) {
-        var program = new concat_gpu_1.ConcatProgram(a.shape, b.shape, axis);
-        return this.compileAndRun(program, [a, b]);
-    };
-    MathBackendWebGL.prototype.concat3D = function (a, b, axis) {
-        var program = new concat_gpu_1.ConcatProgram(a.shape, b.shape, axis);
-        return this.compileAndRun(program, [a, b]);
-    };
-    MathBackendWebGL.prototype.concat4D = function (a, b, axis) {
-        var program = new concat_gpu_1.ConcatProgram(a.shape, b.shape, axis);
+    MathBackendWebGL.prototype.concat = function (a, b) {
+        var program = new concat_gpu_1.ConcatProgram(a.shape, b.shape);
         return this.compileAndRun(program, [a, b]);
     };
     MathBackendWebGL.prototype.neg = function (x) {
         var program = new unaryop_gpu_1.UnaryOpProgram(x.shape, unary_op.NEG);
         return this.compileAndRun(program, [x]);
     };
-    MathBackendWebGL.prototype.matMul = function (a, b, aOrientation, bOrientation) {
-        var program = new mulmat_gpu_1.MatMulProgram(a.shape, b.shape, aOrientation, bOrientation);
+    MathBackendWebGL.prototype.matMul = function (a, b, transposeA, transposeB) {
+        var program = new mulmat_gpu_1.MatMulProgram(a.shape, b.shape, transposeA, transposeB);
         return this.compileAndRun(program, [a, b]);
     };
     MathBackendWebGL.prototype.multiply = function (a, b) {
         var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.MUL, a.shape, b.shape);
         var output = this.makeOutputArray(program.outputShape, types.upcastType(a.dtype, b.dtype));
         return this.compileAndRun(program, [a, b], output);
-    };
-    MathBackendWebGL.prototype.batchNormalization2D = function (x, mean, variance, varianceEpsilon, scale, offset) {
-        var inputs = [x, mean, variance];
-        var offsetShape = null;
-        if (offset != null) {
-            offsetShape = offset.shape;
-            inputs.push(offset);
-        }
-        var scaleShape = null;
-        if (scale != null) {
-            scaleShape = scale.shape;
-            inputs.push(scale);
-        }
-        var program = new batchnorm_gpu_1.BatchNormProgram(x.shape, mean.shape, variance.shape, offsetShape, scaleShape, varianceEpsilon);
-        return this.compileAndRun(program, inputs);
-    };
-    MathBackendWebGL.prototype.batchNormalization3D = function (x, mean, variance, varianceEpsilon, scale, offset) {
-        var inputs = [x, mean, variance];
-        var offsetShape = null;
-        if (offset != null) {
-            offsetShape = offset.shape;
-            inputs.push(offset);
-        }
-        var scaleShape = null;
-        if (scale != null) {
-            scaleShape = scale.shape;
-            inputs.push(scale);
-        }
-        var program = new batchnorm_gpu_1.BatchNormProgram(x.shape, mean.shape, variance.shape, offsetShape, scaleShape, varianceEpsilon);
-        return this.compileAndRun(program, inputs);
     };
     MathBackendWebGL.prototype.batchNormalization4D = function (x, mean, variance, varianceEpsilon, scale, offset) {
         var inputs = [x, mean, variance];
@@ -7948,13 +10125,29 @@ var MathBackendWebGL = (function () {
         var program = new batchnorm_gpu_1.BatchNormProgram(x.shape, mean.shape, variance.shape, offsetShape, scaleShape, varianceEpsilon);
         return this.compileAndRun(program, inputs);
     };
+    MathBackendWebGL.prototype.localResponseNormalization4D = function (x, radius, bias, alpha, beta, normRegion) {
+        var program = new lrn_gpu_1.LRNProgram(x.shape, radius, bias, alpha, beta, normRegion);
+        return this.compileAndRun(program, [x]);
+    };
     MathBackendWebGL.prototype.tile = function (x, reps) {
         var program = new tile_gpu_1.TileProgram(x.shape, reps);
+        return this.compileAndRun(program, [x]);
+    };
+    MathBackendWebGL.prototype.pad1D = function (x, paddings, constantValue) {
+        var program = new pad_gpu_1.Pad1DProgram(x.shape, paddings, constantValue);
+        return this.compileAndRun(program, [x]);
+    };
+    MathBackendWebGL.prototype.pad2D = function (x, paddings, constantValue) {
+        var program = new pad_gpu_1.Pad2DProgram(x.shape, paddings, constantValue);
         return this.compileAndRun(program, [x]);
     };
     MathBackendWebGL.prototype.transpose = function (x, perm) {
         var program = new transpose_gpu_1.TransposeProgram(x.shape, perm);
         return this.compileAndRun(program, [x]);
+    };
+    MathBackendWebGL.prototype.gather = function (x, indices, axis) {
+        var program = new gather_gpu_1.GatherProgram(x.shape, indices.size, axis);
+        return this.compileAndRun(program, [x, indices]);
     };
     MathBackendWebGL.prototype.reduce = function (x, reduceType, dtype) {
         var batchSize = x.shape[0];
@@ -7963,7 +10156,7 @@ var MathBackendWebGL = (function () {
         var reduceInfo = { windowSize: windowSize, inSize: inSize, batchSize: batchSize };
         var program = new reduce_gpu_1.ReduceProgram(reduceInfo, reduceType);
         var _a = program.outputShape, rows = _a[0], cols = _a[1];
-        var output = this.makeOutputArray(program.outputShape, dtype).as2D(rows, cols);
+        var output = this.makeOutputArray([rows, cols], dtype);
         this.compileAndRun(program, [x], output);
         if (output.shape[1] === 1) {
             return output;
@@ -7982,7 +10175,7 @@ var MathBackendWebGL = (function () {
         var reduceInfo = { windowSize: windowSize, inSize: inSize, batchSize: batchSize };
         var program = new argminmax_gpu_1.ArgMinMaxProgram(reduceInfo, reduceType, bestIndicesA == null);
         var _a = program.outputShape, rows = _a[0], cols = _a[1];
-        var output = this.makeOutputArray(program.outputShape, 'int32').as2D(rows, cols);
+        var output = this.makeOutputArray([rows, cols], 'int32');
         var inputs = [x];
         if (bestIndicesA != null) {
             inputs.push(bestIndicesA);
@@ -7998,7 +10191,7 @@ var MathBackendWebGL = (function () {
         var _a = axis_util.computeOutAndReduceShapes(x.shape, axes), outShape = _a[0], reduceShape = _a[1];
         var inSize = util.sizeFromShape(reduceShape);
         var a2D = x.as2D(-1, inSize);
-        var outputDType = types_1.SumTypesMap[x.dtype];
+        var outputDType = types.sumOutType(x.dtype);
         return this.reduce(a2D, 'sum', outputDType).reshape(outShape);
     };
     MathBackendWebGL.prototype.argMin = function (x, axes) {
@@ -8019,6 +10212,55 @@ var MathBackendWebGL = (function () {
         var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.EQUAL, a.shape, b.shape);
         var output = this.makeOutputArray(program.outputShape, 'bool');
         return this.compileAndRun(program, [a, b], output);
+    };
+    MathBackendWebGL.prototype.notEqual = function (a, b) {
+        var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.NOT_EQUAL, a.shape, b.shape);
+        var output = this.makeOutputArray(program.outputShape, 'bool');
+        return this.compileAndRun(program, [a, b], output);
+    };
+    MathBackendWebGL.prototype.less = function (a, b) {
+        var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.LESS, a.shape, b.shape);
+        var output = this.makeOutputArray(program.outputShape, 'bool');
+        return this.compileAndRun(program, [a, b], output);
+    };
+    MathBackendWebGL.prototype.lessEqual = function (a, b) {
+        var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.LESS_EQUAL, a.shape, b.shape);
+        var output = this.makeOutputArray(program.outputShape, 'bool');
+        return this.compileAndRun(program, [a, b], output);
+    };
+    MathBackendWebGL.prototype.greater = function (a, b) {
+        var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.GREATER, a.shape, b.shape);
+        var output = this.makeOutputArray(program.outputShape, 'bool');
+        return this.compileAndRun(program, [a, b], output);
+    };
+    MathBackendWebGL.prototype.greaterEqual = function (a, b) {
+        var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.GREATER_EQUAL, a.shape, b.shape);
+        var output = this.makeOutputArray(program.outputShape, 'bool');
+        return this.compileAndRun(program, [a, b], output);
+    };
+    MathBackendWebGL.prototype.logicalNot = function (x) {
+        var program = new unaryop_gpu_1.UnaryOpProgram(x.shape, unary_op.LOGICAL_NOT);
+        return this.compileAndRun(program, [x]);
+    };
+    MathBackendWebGL.prototype.logicalAnd = function (a, b) {
+        var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.LOGICAL_AND, a.shape, b.shape);
+        var output = this.makeOutputArray(program.outputShape, 'bool');
+        return this.compileAndRun(program, [a, b], output);
+    };
+    MathBackendWebGL.prototype.logicalOr = function (a, b) {
+        var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.LOGICAL_OR, a.shape, b.shape);
+        var output = this.makeOutputArray(program.outputShape, 'bool');
+        return this.compileAndRun(program, [a, b], output);
+    };
+    MathBackendWebGL.prototype.logicalXor = function (a, b) {
+        var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.LOGICAL_XOR, a.shape, b.shape);
+        var output = this.makeOutputArray(program.outputShape, 'bool');
+        return this.compileAndRun(program, [a, b], output);
+    };
+    MathBackendWebGL.prototype.where = function (condition, a, b, dtype) {
+        var program = new logical_gpu_1.WhereProgram(condition.rank, a.shape, a.rank);
+        var output = this.makeOutputArray(program.outputShape, dtype);
+        return this.compileAndRun(program, [condition, a, b], output);
     };
     MathBackendWebGL.prototype.topKValues = function (x, k) {
         throw new Error('topKValues GPU not yet implemented!');
@@ -8065,7 +10307,8 @@ var MathBackendWebGL = (function () {
     };
     MathBackendWebGL.prototype.pow = function (a, b) {
         var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.POW, a.shape, b.shape);
-        return this.compileAndRun(program, [a, b]);
+        var output = this.makeOutputArray(program.outputShape, types.upcastType(a.dtype, b.dtype));
+        return this.compileAndRun(program, [a, b], output);
     };
     MathBackendWebGL.prototype.ceil = function (x) {
         var program = new unaryop_gpu_1.UnaryOpProgram(x.shape, unary_op.CEIL);
@@ -8119,6 +10362,11 @@ var MathBackendWebGL = (function () {
         var program = new binaryop_gpu_1.BinaryOpProgram(binaryop_gpu.PRELU_DER, a.shape, b.shape);
         return this.compileAndRun(program, [a, b]);
     };
+    MathBackendWebGL.prototype.int = function (x) {
+        var program = new unaryop_gpu_1.UnaryOpProgram(x.shape, unary_op.TO_INT);
+        var output = this.makeOutputArray(program.outputShape, 'int32');
+        return this.compileAndRun(program, [x], output);
+    };
     MathBackendWebGL.prototype.clip = function (x, min, max) {
         var program = new clip_gpu_1.ClipProgram(x.shape, min, max);
         return this.compileAndRun(program, [x]);
@@ -8171,10 +10419,9 @@ var MathBackendWebGL = (function () {
         var program = new unaryop_gpu_1.UnaryOpProgram(x.shape, unary_op.STEP(alpha));
         return this.compileAndRun(program, [x]);
     };
-    MathBackendWebGL.prototype.conv2d = function (x, filter, bias, convInfo) {
-        var program = new conv_gpu_1.Conv2DProgram(convInfo, bias != null);
-        var inputs = bias != null ? [x, filter, bias] : [x, filter];
-        return this.compileAndRun(program, inputs);
+    MathBackendWebGL.prototype.conv2d = function (x, filter, convInfo) {
+        var program = new conv_gpu_1.Conv2DProgram(convInfo);
+        return this.compileAndRun(program, [x, filter]);
     };
     MathBackendWebGL.prototype.conv2dDerInput = function (dy, filter, convInfo) {
         var program = new conv_backprop_gpu_1.Conv2DDerInputProgram(convInfo);
@@ -8184,37 +10431,42 @@ var MathBackendWebGL = (function () {
         var program = new conv_backprop_gpu_1.Conv2DDerFilterProgram(convInfo);
         return this.compileAndRun(program, [x, dy]);
     };
-    MathBackendWebGL.prototype.conv2dDerBias = function (dy) {
-        var program = new conv_backprop_gpu_1.Conv2DDerBiasProgram(dy.shape);
-        return this.compileAndRun(program, [dy]);
-    };
     MathBackendWebGL.prototype.depthwiseConv2D = function (x, filter, convInfo) {
         var program = new conv_gpu_depthwise_1.DepthwiseConv2DProgram(convInfo);
         return this.compileAndRun(program, [x, filter]);
     };
     MathBackendWebGL.prototype.maxPool = function (x, convInfo) {
         var program = new pool_gpu_1.Pool2DProgram(convInfo, 'max', false);
-        return this.compileAndRun(program, [x]);
+        var output = this.makeOutputArray(program.outputShape, x.dtype);
+        return this.compileAndRun(program, [x], output);
     };
     MathBackendWebGL.prototype.minPool = function (x, convInfo) {
         var program = new pool_gpu_1.Pool2DProgram(convInfo, 'min', false);
-        return this.compileAndRun(program, [x]);
+        var output = this.makeOutputArray(program.outputShape, x.dtype);
+        return this.compileAndRun(program, [x], output);
     };
     MathBackendWebGL.prototype.avgPool = function (x, convInfo) {
         var program = new pool_gpu_1.Pool2DProgram(convInfo, 'avg', false);
-        return this.compileAndRun(program, [x]);
+        var output = this.makeOutputArray(program.outputShape, 'float32');
+        return this.compileAndRun(program, [x], output);
     };
     MathBackendWebGL.prototype.maxPoolBackprop = function (dy, x, convInfo) {
         var getPositions = true;
         var maxPoolPositionsProgram = new pool_gpu_1.Pool2DProgram(convInfo, 'max', getPositions);
         var maxPoolPositions = this.compileAndRun(maxPoolPositionsProgram, [x]);
         var maxPoolBackPropProgram = new max_pool_backprop_gpu_1.MaxPool2DBackpropProgram(convInfo);
-        var result = this.compileAndRun(maxPoolBackPropProgram, [dy, maxPoolPositions]);
+        var output = this.makeOutputArray(maxPoolBackPropProgram.outputShape, x.dtype);
+        var result = this.compileAndRun(maxPoolBackPropProgram, [dy, maxPoolPositions], output);
         maxPoolPositions.dispose();
         return result;
     };
-    MathBackendWebGL.prototype.resizeBilinear3D = function (x, newShape2D, alignCorners) {
-        var program = new resize_bilinear_gpu_1.ResizeBilinear3DProgram(x.shape, newShape2D, alignCorners);
+    MathBackendWebGL.prototype.avgPoolBackprop = function (dy, x, convInfo) {
+        var avgPoolBackpropProgram = new avg_pool_backprop_gpu_1.AvgPool2DBackpropProgram(convInfo);
+        var output = this.makeOutputArray(avgPoolBackpropProgram.outputShape, x.dtype);
+        return this.compileAndRun(avgPoolBackpropProgram, [dy], output);
+    };
+    MathBackendWebGL.prototype.resizeBilinear = function (x, newHeight, newWidth, alignCorners) {
+        var program = new resize_bilinear_gpu_1.ResizeBilinearProgram(x.shape, newHeight, newWidth, alignCorners);
         return this.compileAndRun(program, [x]);
     };
     MathBackendWebGL.prototype.multinomial = function (probs, numSamples, seed) {
@@ -8230,7 +10482,7 @@ var MathBackendWebGL = (function () {
         return this.compileAndRun(program, [indices]);
     };
     MathBackendWebGL.prototype.makeOutputArray = function (shape, dtype) {
-        return ndarray_1.NDArray.make(shape, {}, dtype);
+        return tensor_1.Tensor.make(shape, {}, dtype);
     };
     MathBackendWebGL.prototype.compileAndRun = function (program, inputs, output, customSetup) {
         var _this = this;
@@ -8238,17 +10490,28 @@ var MathBackendWebGL = (function () {
             output = this.makeOutputArray(program.outputShape, inputs[0].dtype);
         }
         var inputsData = inputs.map(function (input) {
-            _this.uploadToGPU(input.id);
-            return { array: input, texData: _this.texData[input.id] };
+            _this.uploadToGPU(input.dataId);
+            return { tensor: input, texData: _this.texData.get(input.dataId) };
         });
-        this.getOrMakeTexData(output.id, output.shape, output.dtype);
-        this.uploadToGPU(output.id);
-        var outputData = { array: output, texData: this.texData[output.id] };
+        this.uploadToGPU(output.dataId);
+        var outputData = {
+            tensor: output,
+            texData: this.texData.get(output.dataId)
+        };
         var key = gpgpu_math.makeShaderKey(program, inputsData, outputData);
         var binary = this.getAndSaveBinary(key, function () {
             return gpgpu_math.compileProgram(_this.gpgpu, program, inputsData, outputData);
         });
+        var shouldTimeProgram = this.activeTimers != null;
+        var query;
+        if (shouldTimeProgram) {
+            query = this.startTimer();
+        }
         gpgpu_math.runProgram(binary, inputsData, outputData, customSetup);
+        if (shouldTimeProgram) {
+            query = this.endTimer(query);
+            this.activeTimers.push(this.getQueryTime(query));
+        }
         return output;
     };
     MathBackendWebGL.prototype.getAndSaveBinary = function (key, getBinary) {
@@ -8261,43 +10524,61 @@ var MathBackendWebGL = (function () {
         return this.textureManager;
     };
     MathBackendWebGL.prototype.dispose = function () {
+        if (this.disposed) {
+            return;
+        }
         for (var key in this.binaryCache) {
             this.gpgpu.deleteProgram(this.binaryCache[key].webGLProgram);
         }
         this.textureManager.dispose();
+        this.canvas.remove();
         if (this.gpgpuCreatedLocally) {
             this.gpgpu.dispose();
         }
+        this.disposed = true;
     };
-    MathBackendWebGL.prototype.throwIfNoData = function (id) {
-        if (!(id in this.texData)) {
-            throw new Error("No data found for NDArray with id " + id + ". " +
-                "Use dl.ENV.math instead of constructing your own NDArrayMath. " +
-                "If you need to construct your own math, make sure this array is " +
-                "allocated after the math construction");
+    MathBackendWebGL.prototype.throwIfNoData = function (dataId) {
+        if (!this.texData.has(dataId)) {
+            throw new Error("WebGL backend: No data found for this tensor. " +
+                "Did you change your backend in the middle of the program? " +
+                "New backends can't use Tensors created with previous backends");
         }
     };
-    MathBackendWebGL.prototype.uploadToGPU = function (id) {
-        this.throwIfNoData(id);
-        var _a = this.texData[id], texShape = _a.texShape, values = _a.values, texture = _a.texture, dtype = _a.dtype;
+    MathBackendWebGL.prototype.uploadToGPU = function (dataId) {
+        this.throwIfNoData(dataId);
+        var texData = this.texData.get(dataId);
+        var shape = texData.shape, values = texData.values, texture = texData.texture, dtype = texData.dtype, texType = texData.texType;
         if (texture != null) {
             return;
         }
-        var newTexture = this.textureManager.acquireTexture(texShape);
-        this.texData[id].texture = newTexture;
+        var shouldTimeProgram = this.activeTimers != null;
+        var start;
+        if (shouldTimeProgram) {
+            start = performance.now();
+        }
+        var texShape = webgl_util.getTextureShapeFromLogicalShape(this.gpgpu.gl, shape);
+        texData.texShape = texShape;
+        var newTexture = this.textureManager.acquireTexture(texShape, texType);
+        texData.texture = newTexture;
         if (values != null) {
             this.gpgpu.uploadMatrixToTexture(newTexture, texShape[0], texShape[1], typedArrayToFloat32(values, dtype));
+            texData.values = null;
+            if (shouldTimeProgram) {
+                this.uploadWaitMs += performance.now() - start;
+            }
         }
     };
-    MathBackendWebGL.prototype.cacheOnCPU = function (id, float32Values) {
+    MathBackendWebGL.prototype.cacheOnCPU = function (dataId, float32Values) {
         var dontKeepCopyOnGPU = this.delayedStorage;
-        var _a = this.texData[id], texture = _a.texture, texShape = _a.texShape, dtype = _a.dtype;
+        var texData = this.texData.get(dataId);
+        var texture = texData.texture, texShape = texData.texShape, dtype = texData.dtype, texType = texData.texType;
         if (dontKeepCopyOnGPU && texture != null) {
-            this.textureManager.releaseTexture(texture, texShape);
-            this.texData[id].texture = null;
+            this.textureManager.releaseTexture(texture, texShape, texType);
+            texData.texture = null;
+            texData.texShape = null;
         }
         if (float32Values != null) {
-            this.texData[id].values = float32ToTypedArray(float32Values, dtype);
+            texData.values = float32ToTypedArray(float32Values, dtype);
         }
     };
     return MathBackendWebGL;
@@ -8309,21 +10590,16 @@ var NDArrayMathGPU = (function (_super) {
     function NDArrayMathGPU(gpgpu, safeMode) {
         if (safeMode === void 0) { safeMode = false; }
         var _this = this;
-        console.warn('new NDArrayMathGPU() is deprecated. Please use the global ' +
-            'dl.ENV.math. In rare cases, to construct your own NDArrayMath ' +
-            'that runs on GPU, use math = new NDArrayMath(\'webgl\', safeMode); ' +
-            'and make sure to set it as global: dl.ENV.setMath(math);');
+        console.warn('new NDArrayMathGPU() is deprecated. Please use ' +
+            'dl.setBackend(\'webgl\').');
         _this = _super.call(this, new MathBackendWebGL(gpgpu), safeMode) || this;
-        environment_1.ENV.setMath(_this);
         return _this;
     }
     NDArrayMathGPU.prototype.getGPGPUContext = function () {
-        return this.backendEngine.getBackend()
-            .getGPGPUContext();
+        return this.engine.backend.getGPGPUContext();
     };
     NDArrayMathGPU.prototype.getTextureManager = function () {
-        return this.backendEngine.getBackend()
-            .getTextureManager();
+        return this.engine.backend.getTextureManager();
     };
     return NDArrayMathGPU;
 }(math_1.NDArrayMath));
@@ -8360,425 +10636,353 @@ function typedArrayToFloat32(a, dtype) {
     }
 }
 
-},{"../../environment":15,"../../util":100,"../axis_util":54,"../math":93,"../ndarray":94,"../reduce_util":96,"../types":98,"./webgl/argminmax_gpu":61,"./webgl/batchnorm_gpu":62,"./webgl/binaryop_gpu":63,"./webgl/clip_gpu":64,"./webgl/concat_gpu":65,"./webgl/conv_backprop_gpu":66,"./webgl/conv_gpu":67,"./webgl/conv_gpu_depthwise":68,"./webgl/copy_gpu":69,"./webgl/gpgpu_context":70,"./webgl/gpgpu_math":71,"./webgl/gpgpu_util":72,"./webgl/max_pool_backprop_gpu":73,"./webgl/mulmat_gpu":74,"./webgl/multinomial_gpu":75,"./webgl/onehot_gpu":76,"./webgl/pool_gpu":77,"./webgl/reduce_gpu":78,"./webgl/resize_bilinear_gpu":80,"./webgl/slice_gpu":82,"./webgl/tex_util":83,"./webgl/texture_manager":84,"./webgl/tile_gpu":85,"./webgl/transpose_gpu":86,"./webgl/unaryop_gpu":87,"./webgl/webgl_util":88}],58:[function(require,module,exports){
+},{"../environment":34,"../math":105,"../ops/axis_util":107,"../ops/reduce_util":126,"../tensor":146,"../types":150,"../util":151,"./webgl/argminmax_gpu":72,"./webgl/avg_pool_backprop_gpu":73,"./webgl/batchnorm_gpu":74,"./webgl/binaryop_gpu":75,"./webgl/clip_gpu":76,"./webgl/concat_gpu":77,"./webgl/conv_backprop_gpu":78,"./webgl/conv_gpu":79,"./webgl/conv_gpu_depthwise":80,"./webgl/from_pixels_gpu":81,"./webgl/gather_gpu":82,"./webgl/gpgpu_context":83,"./webgl/gpgpu_math":84,"./webgl/logical_gpu":86,"./webgl/lrn_gpu":87,"./webgl/max_pool_backprop_gpu":88,"./webgl/mulmat_gpu":89,"./webgl/multinomial_gpu":90,"./webgl/onehot_gpu":91,"./webgl/pad_gpu":92,"./webgl/pool_gpu":93,"./webgl/reduce_gpu":94,"./webgl/resize_bilinear_gpu":95,"./webgl/reverse_gpu":96,"./webgl/slice_gpu":98,"./webgl/tex_util":99,"./webgl/texture_manager":100,"./webgl/tile_gpu":101,"./webgl/transpose_gpu":102,"./webgl/unaryop_gpu":103,"./webgl/webgl_util":104}],70:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var KERNEL_METHODS = {
-    MatMul: function (backend, config) {
-        return backend.matMul(config.inputs.a, config.inputs.b, config.args.aOrientation, config.args.bOrientation);
-    },
-    Clone: function (backend, config) {
-        return backend.clone(config.inputs.x);
-    },
-    Slice1D: function (backend, config) {
+var ops = require("../ops/ops");
+var tensor_1 = require("../tensor");
+var util = require("../util");
+function executeKernel(backend, kernelName, inputAndArgs) {
+    if (kernelName === 'MatMul') {
+        var config = inputAndArgs;
+        return backend.matMul(config.inputs.a, config.inputs.b, config.args.transposeA, config.args.transposeB);
+    }
+    else if (kernelName === 'Slice1D') {
+        var config = inputAndArgs;
         return backend.slice1D(config.inputs.x, config.args.begin, config.args.size);
-    },
-    Slice2D: function (backend, config) {
+    }
+    else if (kernelName === 'Slice2D') {
+        var config = inputAndArgs;
         return backend.slice2D(config.inputs.x, config.args.begin, config.args.size);
-    },
-    Slice3D: function (backend, config) {
+    }
+    else if (kernelName === 'Slice3D') {
+        var config = inputAndArgs;
         return backend.slice3D(config.inputs.x, config.args.begin, config.args.size);
-    },
-    Slice4D: function (backend, config) {
+    }
+    else if (kernelName === 'Slice4D') {
+        var config = inputAndArgs;
         return backend.slice4D(config.inputs.x, config.args.begin, config.args.size);
-    },
-    Concat1D: function (backend, config) {
-        return backend.concat1D(config.inputs.a, config.inputs.b);
-    },
-    Concat2D: function (backend, config) {
-        return backend.concat2D(config.inputs.a, config.inputs.b, config.args.axis);
-    },
-    Concat3D: function (backend, config) {
-        return backend.concat3D(config.inputs.a, config.inputs.b, config.args.axis);
-    },
-    Concat4D: function (backend, config) {
-        return backend.concat4D(config.inputs.a, config.inputs.b, config.args.axis);
-    },
-    Neg: function (backend, config) {
+    }
+    else if (kernelName === 'Reverse4D') {
+        var config = inputAndArgs;
+        return backend.reverse4D(config.inputs.x, config.args.axis);
+    }
+    else if (kernelName === 'Concat') {
+        var config = inputAndArgs;
+        return backend.concat(config.inputs.a, config.inputs.b);
+    }
+    else if (kernelName === 'Neg') {
+        var config = inputAndArgs;
         return backend.neg(config.inputs.x);
-    },
-    Add: function (backend, config) {
+    }
+    else if (kernelName === 'Add') {
+        var config = inputAndArgs;
         return backend.add(config.inputs.a, config.inputs.b);
-    },
-    Sub: function (backend, config) {
+    }
+    else if (kernelName === 'Sub') {
+        var config = inputAndArgs;
         return backend.subtract(config.inputs.a, config.inputs.b);
-    },
-    Mul: function (backend, config) {
+    }
+    else if (kernelName === 'Mul') {
+        var config = inputAndArgs;
         return backend.multiply(config.inputs.a, config.inputs.b);
-    },
-    Div: function (backend, config) {
+    }
+    else if (kernelName === 'Div') {
+        var config = inputAndArgs;
         return backend.divide(config.inputs.a, config.inputs.b);
-    },
-    Sum: function (backend, config) {
+    }
+    else if (kernelName === 'Sum') {
+        var config = inputAndArgs;
         return backend.sum(config.inputs.x, config.args.axes);
-    },
-    ArgMax: function (backend, config) {
+    }
+    else if (kernelName === 'ArgMax') {
+        var config = inputAndArgs;
         return backend.argMax(config.inputs.x, config.args.axes);
-    },
-    ArgMin: function (backend, config) {
+    }
+    else if (kernelName === 'ArgMin') {
+        var config = inputAndArgs;
         return backend.argMin(config.inputs.x, config.args.axes);
-    },
-    Equal: function (backend, config) {
+    }
+    else if (kernelName === 'Equal') {
+        var config = inputAndArgs;
         return backend.equal(config.inputs.a, config.inputs.b);
-    },
-    TopKValues: function (backend, config) {
+    }
+    else if (kernelName === 'NotEqual') {
+        var config = inputAndArgs;
+        return backend.notEqual(config.inputs.a, config.inputs.b);
+    }
+    else if (kernelName === 'Less') {
+        var config = inputAndArgs;
+        return backend.less(config.inputs.a, config.inputs.b);
+    }
+    else if (kernelName === 'LessEqual') {
+        var config = inputAndArgs;
+        return backend.lessEqual(config.inputs.a, config.inputs.b);
+    }
+    else if (kernelName === 'Greater') {
+        var config = inputAndArgs;
+        return backend.greater(config.inputs.a, config.inputs.b);
+    }
+    else if (kernelName === 'GreaterEqual') {
+        var config = inputAndArgs;
+        return backend.greaterEqual(config.inputs.a, config.inputs.b);
+    }
+    else if (kernelName === 'LogicalNot') {
+        var config = inputAndArgs;
+        return backend.logicalNot(config.inputs.x);
+    }
+    else if (kernelName === 'LogicalAnd') {
+        var config = inputAndArgs;
+        return backend.logicalAnd(config.inputs.a, config.inputs.b);
+    }
+    else if (kernelName === 'LogicalOr') {
+        var config = inputAndArgs;
+        return backend.logicalOr(config.inputs.a, config.inputs.b);
+    }
+    else if (kernelName === 'LogicalXor') {
+        var config = inputAndArgs;
+        return backend.logicalXor(config.inputs.a, config.inputs.b);
+    }
+    else if (kernelName === 'Where') {
+        var config = inputAndArgs;
+        return backend.where(config.inputs.condition, config.inputs.a, config.inputs.b, config.args.dtype);
+    }
+    else if (kernelName === 'TopKValues') {
+        var config = inputAndArgs;
         return backend.topKValues(config.inputs.x, config.args.k);
-    },
-    TopKIndices: function (backend, config) {
+    }
+    else if (kernelName === 'TopKIndices') {
+        var config = inputAndArgs;
         return backend.topKIndices(config.inputs.x, config.args.k);
-    },
-    Min: function (backend, config) {
+    }
+    else if (kernelName === 'Min') {
+        var config = inputAndArgs;
         return backend.min(config.inputs.x, config.args.axes);
-    },
-    Minimum: function (backend, config) {
+    }
+    else if (kernelName === 'Minimum') {
+        var config = inputAndArgs;
         return backend.minimum(config.inputs.a, config.inputs.b);
-    },
-    Max: function (backend, config) {
+    }
+    else if (kernelName === 'Max') {
+        var config = inputAndArgs;
         return backend.max(config.inputs.x, config.args.axes);
-    },
-    Maximum: function (backend, config) {
+    }
+    else if (kernelName === 'Maximum') {
+        var config = inputAndArgs;
         return backend.maximum(config.inputs.a, config.inputs.b);
-    },
-    Ceil: function (backend, config) {
+    }
+    else if (kernelName === 'Ceil') {
+        var config = inputAndArgs;
         return backend.ceil(config.inputs.x);
-    },
-    Floor: function (backend, config) {
+    }
+    else if (kernelName === 'Floor') {
+        var config = inputAndArgs;
         return backend.floor(config.inputs.x);
-    },
-    Pow: function (backend, config) {
-        return backend.pow(config.inputs.a, config.inputs.b);
-    },
-    Exp: function (backend, config) {
+    }
+    else if (kernelName === 'Pow') {
+        var config = inputAndArgs;
+        return backend.pow(config.inputs.base, config.inputs.exp);
+    }
+    else if (kernelName === 'Exp') {
+        var config = inputAndArgs;
         return backend.exp(config.inputs.x);
-    },
-    Log: function (backend, config) {
+    }
+    else if (kernelName === 'Log') {
+        var config = inputAndArgs;
         return backend.log(config.inputs.x);
-    },
-    Sqrt: function (backend, config) {
+    }
+    else if (kernelName === 'Sqrt') {
+        var config = inputAndArgs;
         return backend.sqrt(config.inputs.x);
-    },
-    Square: function (backend, config) {
+    }
+    else if (kernelName === 'Square') {
+        var config = inputAndArgs;
         return backend.square(config.inputs.x);
-    },
-    Relu: function (backend, config) {
+    }
+    else if (kernelName === 'Relu') {
+        var config = inputAndArgs;
         return backend.relu(config.inputs.x);
-    },
-    LeakyRelu: function (backend, config) {
+    }
+    else if (kernelName === 'Reshape') {
+        var config = inputAndArgs;
+        var x = config.inputs.x;
+        var newShape = config.args.newShape;
+        return tensor_1.Tensor.make(newShape, { dataId: x.dataId }, x.dtype);
+    }
+    else if (kernelName === 'Cast') {
+        var config = inputAndArgs;
+        var x = config.inputs.x;
+        var newDType = config.args.newDType;
+        if (!util.hasEncodingLoss(x.dtype, newDType)) {
+            return tensor_1.Tensor.make(x.shape, { dataId: x.dataId }, newDType);
+        }
+        if (newDType === 'int32') {
+            return backend.int(x);
+        }
+        else if (newDType === 'bool') {
+            return backend.notEqual(x, ops.scalar(0, x.dtype));
+        }
+        else {
+            throw new Error("Error in Cast: unknown dtype argument (" + newDType + ")");
+        }
+    }
+    else if (kernelName === 'LeakyRelu') {
+        var config = inputAndArgs;
         return backend.leakyRelu(config.inputs.x, config.args.alpha);
-    },
-    PReLU: function (backend, config) {
+    }
+    else if (kernelName === 'PReLU') {
+        var config = inputAndArgs;
         return backend.prelu(config.inputs.x, config.inputs.alpha);
-    },
-    PReLUDer: function (backend, config) {
+    }
+    else if (kernelName === 'PReLUDer') {
+        var config = inputAndArgs;
         return backend.preluDer(config.inputs.x, config.inputs.alpha);
-    },
-    Elu: function (backend, config) {
+    }
+    else if (kernelName === 'Elu') {
+        var config = inputAndArgs;
         return backend.elu(config.inputs.x);
-    },
-    EluDer: function (backend, config) {
+    }
+    else if (kernelName === 'EluDer') {
+        var config = inputAndArgs;
         return backend.eluDer(config.inputs.x);
-    },
-    Selu: function (backend, config) {
+    }
+    else if (kernelName === 'Selu') {
+        var config = inputAndArgs;
         return backend.selu(config.inputs.x);
-    },
-    Abs: function (backend, config) {
+    }
+    else if (kernelName === 'Abs') {
+        var config = inputAndArgs;
         return backend.abs(config.inputs.x);
-    },
-    Sigmoid: function (backend, config) {
+    }
+    else if (kernelName === 'Sigmoid') {
+        var config = inputAndArgs;
         return backend.sigmoid(config.inputs.x);
-    },
-    Step: function (backend, config) {
+    }
+    else if (kernelName === 'Step') {
+        var config = inputAndArgs;
         return backend.step(config.inputs.x, config.args.alpha);
-    },
-    Sin: function (backend, config) {
+    }
+    else if (kernelName === 'Sin') {
+        var config = inputAndArgs;
         return backend.sin(config.inputs.x);
-    },
-    Cos: function (backend, config) {
+    }
+    else if (kernelName === 'Cos') {
+        var config = inputAndArgs;
         return backend.cos(config.inputs.x);
-    },
-    Tan: function (backend, config) {
+    }
+    else if (kernelName === 'Tan') {
+        var config = inputAndArgs;
         return backend.tan(config.inputs.x);
-    },
-    Asin: function (backend, config) {
+    }
+    else if (kernelName === 'Asin') {
+        var config = inputAndArgs;
         return backend.asin(config.inputs.x);
-    },
-    Acos: function (backend, config) {
+    }
+    else if (kernelName === 'Acos') {
+        var config = inputAndArgs;
         return backend.acos(config.inputs.x);
-    },
-    Atan: function (backend, config) {
+    }
+    else if (kernelName === 'Atan') {
+        var config = inputAndArgs;
         return backend.atan(config.inputs.x);
-    },
-    Sinh: function (backend, config) {
+    }
+    else if (kernelName === 'Sinh') {
+        var config = inputAndArgs;
         return backend.sinh(config.inputs.x);
-    },
-    Cosh: function (backend, config) {
+    }
+    else if (kernelName === 'Cosh') {
+        var config = inputAndArgs;
         return backend.cosh(config.inputs.x);
-    },
-    Tanh: function (backend, config) {
+    }
+    else if (kernelName === 'Tanh') {
+        var config = inputAndArgs;
         return backend.tanh(config.inputs.x);
-    },
-    Clip: function (backend, config) {
+    }
+    else if (kernelName === 'Clip') {
+        var config = inputAndArgs;
         return backend.clip(config.inputs.x, config.args.min, config.args.max);
-    },
-    Transpose: function (backend, config) {
-        return backend.transpose(config.inputs.x, config.args.perm);
-    },
-    Tile: function (backend, config) {
+    }
+    else if (kernelName === 'Tile') {
+        var config = inputAndArgs;
         return backend.tile(config.inputs.x, config.args.reps);
-    },
-    Conv2D: function (backend, config) {
-        return backend.conv2d(config.inputs.x, config.inputs.filter, config.inputs.bias, config.args.convInfo);
-    },
-    Conv2DDerInput: function (backend, config) {
+    }
+    else if (kernelName === 'Gather') {
+        var config = inputAndArgs;
+        return backend.gather(config.inputs.x, config.inputs.indices, config.args.axis);
+    }
+    else if (kernelName === 'Pad1D') {
+        var config = inputAndArgs;
+        return backend.pad1D(config.inputs.x, config.args.paddings, config.args.constantValue);
+    }
+    else if (kernelName === 'Pad2D') {
+        var config = inputAndArgs;
+        return backend.pad2D(config.inputs.x, config.args.paddings, config.args.constantValue);
+    }
+    else if (kernelName === 'Transpose') {
+        var config = inputAndArgs;
+        return backend.transpose(config.inputs.x, config.args.perm);
+    }
+    else if (kernelName === 'Conv2D') {
+        var config = inputAndArgs;
+        return backend.conv2d(config.inputs.x, config.inputs.filter, config.args.convInfo);
+    }
+    else if (kernelName === 'Conv2DDerInput') {
+        var config = inputAndArgs;
         return backend.conv2dDerInput(config.inputs.dy, config.inputs.filter, config.args.convInfo);
-    },
-    Conv2DDerFilter: function (backend, config) {
+    }
+    else if (kernelName === 'Conv2DDerFilter') {
+        var config = inputAndArgs;
         return backend.conv2dDerFilter(config.inputs.x, config.inputs.dy, config.args.convInfo);
-    },
-    Conv2DDerBias: function (backend, config) {
-        return backend.conv2dDerBias(config.inputs.dy);
-    },
-    DepthwiseConv2D: function (backend, config) {
+    }
+    else if (kernelName === 'DepthwiseConv2D') {
+        var config = inputAndArgs;
         return backend.depthwiseConv2D(config.inputs.x, config.inputs.filter, config.args.convInfo);
-    },
-    MaxPool: function (backend, config) {
+    }
+    else if (kernelName === 'MaxPool') {
+        var config = inputAndArgs;
         return backend.maxPool(config.inputs.x, config.args.convInfo);
-    },
-    MaxPoolBackprop: function (backend, config) {
+    }
+    else if (kernelName === 'MaxPoolBackprop') {
+        var config = inputAndArgs;
         return backend.maxPoolBackprop(config.inputs.dy, config.inputs.x, config.args.convInfo);
-    },
-    AvgPool: function (backend, config) {
+    }
+    else if (kernelName === 'AvgPool') {
+        var config = inputAndArgs;
         return backend.avgPool(config.inputs.x, config.args.convInfo);
-    },
-    MinPool: function (backend, config) {
+    }
+    else if (kernelName === 'AvgPoolBackprop') {
+        var config = inputAndArgs;
+        return backend.avgPoolBackprop(config.inputs.dy, config.inputs.x, config.args.convInfo);
+    }
+    else if (kernelName === 'MinPool') {
+        var config = inputAndArgs;
         return backend.minPool(config.inputs.x, config.args.convInfo);
-    },
-    ResizeBilinear3D: function (backend, config) {
-        return backend.resizeBilinear3D(config.inputs.x, config.args.newShape2D, config.args.alignCorners);
-    },
-    BatchNorm4D: function (backend, config) {
+    }
+    else if (kernelName === 'ResizeBilinear') {
+        var config = inputAndArgs;
+        return backend.resizeBilinear(config.inputs.x, config.args.newHeight, config.args.newWidth, config.args.alignCorners);
+    }
+    else if (kernelName === 'BatchNorm4D') {
+        var config = inputAndArgs;
         return backend.batchNormalization4D(config.inputs.x, config.inputs.mean, config.inputs.variance, config.args.varianceEpsilon, config.inputs.scale, config.inputs.offset);
-    },
-    BatchNorm3D: function (backend, config) {
-        return backend.batchNormalization3D(config.inputs.x, config.inputs.mean, config.inputs.variance, config.args.varianceEpsilon, config.inputs.scale, config.inputs.offset);
-    },
-    BatchNorm2D: function (backend, config) {
-        return backend.batchNormalization2D(config.inputs.x, config.inputs.mean, config.inputs.variance, config.args.varianceEpsilon, config.inputs.scale, config.inputs.offset);
-    },
-    Multinomial: function (backend, config) {
+    }
+    else if (kernelName === 'LRN4D') {
+        var config = inputAndArgs;
+        return backend.localResponseNormalization4D(config.inputs.x, config.args.radius, config.args.bias, config.args.alpha, config.args.beta, config.args.normRegion);
+    }
+    else if (kernelName === 'Multinomial') {
+        var config = inputAndArgs;
         return backend.multinomial(config.inputs.probs, config.args.numSamples, config.args.seed);
-    },
-    OneHot: function (backend, config) {
+    }
+    else if (kernelName === 'OneHot') {
+        var config = inputAndArgs;
         return backend.oneHot(config.inputs.indices, config.args.depth, config.args.onValue, config.args.offValue);
     }
-};
-function executeKernel(backend, kernelName, config) {
-    return KERNEL_METHODS[kernelName](backend, config);
+    throw new Error("No backend method found for kernel " + kernelName);
 }
 exports.executeKernel = executeKernel;
 
-},{}],59:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var environment_1 = require("../../environment");
-var ndarray_1 = require("../ndarray");
-function getFilteredNodesXToY(tape, xs, y) {
-    var arraysFromX = {};
-    var nodesFromX = {};
-    for (var i = 0; i < xs.length; i++) {
-        arraysFromX[xs[i].id] = true;
-    }
-    for (var i = 0; i < tape.length; i++) {
-        var node = tape[i];
-        var nodeInputs = node.inputAndArgs.inputs;
-        for (var inputName in nodeInputs) {
-            var input = nodeInputs[inputName];
-            var anyInputFromX = false;
-            for (var j = 0; j < xs.length; j++) {
-                if (arraysFromX[input.id]) {
-                    if (node.output instanceof ndarray_1.NDArray) {
-                        arraysFromX[node.output.id] = true;
-                    }
-                    else {
-                        var keys = Object.keys(node.output);
-                        for (var _i = 0, keys_1 = keys; _i < keys_1.length; _i++) {
-                            var key = keys_1[_i];
-                            arraysFromX[node.output[key].id] = true;
-                        }
-                    }
-                    anyInputFromX = true;
-                    nodesFromX[node.id] = true;
-                    break;
-                }
-            }
-            if (anyInputFromX) {
-                break;
-            }
-        }
-    }
-    var arraysLeadToY = {};
-    arraysLeadToY[y.id] = true;
-    var nodesToY = {};
-    for (var i = tape.length - 1; i >= 0; i--) {
-        var node = tape[i];
-        var nodeInputs = node.inputAndArgs.inputs;
-        var outputs = [];
-        if (node.output instanceof ndarray_1.NDArray) {
-            outputs.push(node.output);
-        }
-        else {
-            var keys = Object.keys(node.output);
-            for (var _a = 0, keys_2 = keys; _a < keys_2.length; _a++) {
-                var key = keys_2[_a];
-                outputs.push(node.output[key]);
-            }
-        }
-        for (var j = 0; j < outputs.length; j++) {
-            if (arraysLeadToY[outputs[j].id]) {
-                for (var inputName in nodeInputs) {
-                    arraysLeadToY[nodeInputs[inputName].id] = true;
-                    nodesToY[node.id] = true;
-                }
-                break;
-            }
-        }
-    }
-    var filteredTape = [];
-    for (var i = 0; i < tape.length; i++) {
-        var node = tape[i];
-        if (nodesFromX[node.id] && nodesToY[node.id]) {
-            var prunedInputs = {};
-            for (var inputName in node.inputAndArgs.inputs) {
-                var nodeInput = node.inputAndArgs.inputs[inputName];
-                if (arraysFromX[nodeInput.id]) {
-                    prunedInputs[inputName] = nodeInput;
-                }
-            }
-            var prunedOutputs = void 0;
-            if (node.output instanceof ndarray_1.NDArray) {
-                prunedOutputs = node.output;
-            }
-            else {
-                prunedOutputs = {};
-                for (var outputName in node.output) {
-                    var output = node.output[outputName];
-                    if (arraysLeadToY[output.id]) {
-                        prunedOutputs[outputName] = node.output[outputName];
-                    }
-                }
-            }
-            var prunedNode = Object.assign({}, node);
-            prunedNode.inputAndArgs = { inputs: prunedInputs };
-            prunedNode.output = prunedOutputs;
-            filteredTape.push(prunedNode);
-        }
-    }
-    return filteredTape;
-}
-exports.getFilteredNodesXToY = getFilteredNodesXToY;
-function backpropagateGradients(arrayAccumulatedGradientMap, filteredTape) {
-    for (var i = filteredTape.length - 1; i >= 0; i--) {
-        var node = filteredTape[i];
-        var dy = void 0;
-        if (node.output instanceof ndarray_1.NDArray) {
-            dy = arrayAccumulatedGradientMap[node.output.id];
-        }
-        else {
-            dy = {};
-            var keys = Object.keys(node.output);
-            for (var _i = 0, keys_3 = keys; _i < keys_3.length; _i++) {
-                var key = keys_3[_i];
-                dy[key] = arrayAccumulatedGradientMap[node.output[key].id];
-            }
-        }
-        if (node.gradient == null) {
-            throw new Error("Cannot compute gradient: gradient function not found for\n              " + node.name + ".");
-        }
-        var inputGradients = node.gradient(dy, node.output);
-        for (var inputName in node.inputAndArgs.inputs) {
-            if (!(inputName in inputGradients)) {
-                throw new Error("Cannot backprop through input " +
-                    (node.name + "." + inputName + ". Gradients found: ") +
-                    (Object.keys(inputGradients) + "."));
-            }
-            var grad = inputGradients[inputName]();
-            var activation = node.inputAndArgs.inputs[inputName];
-            if (arrayAccumulatedGradientMap[activation.id] == null) {
-                arrayAccumulatedGradientMap[activation.id] = grad;
-            }
-            else {
-                var curGradient = arrayAccumulatedGradientMap[activation.id];
-                arrayAccumulatedGradientMap[activation.id] =
-                    environment_1.ENV.math.add(curGradient, grad);
-                curGradient.dispose();
-            }
-        }
-    }
-}
-exports.backpropagateGradients = backpropagateGradients;
-function computeInputs(tape) {
-    var outputArrays = {};
-    for (var i = 0; i < tape.length; i++) {
-        var node = tape[i];
-        if (node.output instanceof ndarray_1.NDArray) {
-            outputArrays[node.output.id] = true;
-        }
-        else {
-            var keys = Object.keys(node.output);
-            for (var _i = 0, keys_4 = keys; _i < keys_4.length; _i++) {
-                var key = keys_4[_i];
-                outputArrays[node.output[key].id] = true;
-            }
-        }
-    }
-    var inputArrays = {};
-    var inputArraysSeen = {};
-    var idx = 0;
-    for (var i = 0; i < tape.length; i++) {
-        var node = tape[i];
-        var inputs = node.inputAndArgs.inputs;
-        var keys = Object.keys(inputs);
-        for (var _a = 0, keys_5 = keys; _a < keys_5.length; _a++) {
-            var key = keys_5[_a];
-            if (!outputArrays[inputs[key].id] && !inputArraysSeen[inputs[key].id]) {
-                inputArrays[(idx++).toString()] = inputs[key];
-                inputArraysSeen[inputs[key].id] = true;
-            }
-        }
-    }
-    return inputArrays;
-}
-exports.computeInputs = computeInputs;
-function extractNDArraysFromScopeResult(result) {
-    if (result == null) {
-        return [];
-    }
-    if (result instanceof ndarray_1.NDArray) {
-        return [result];
-    }
-    var list = [];
-    var resultObj = result;
-    for (var k in resultObj) {
-        var val = resultObj[k];
-        if (val instanceof ndarray_1.NDArray) {
-            list.push(val);
-        }
-    }
-    return list;
-}
-exports.extractNDArraysFromScopeResult = extractNDArraysFromScopeResult;
-function stripUndefinedInputsFromInputConfig(config) {
-    var keys = Object.keys(config.inputs);
-    keys.forEach(function (key) {
-        if (config.inputs[key] == null) {
-            delete config.inputs[key];
-        }
-    });
-    return config;
-}
-exports.stripUndefinedInputsFromInputConfig = stripUndefinedInputsFromInputConfig;
-
-},{"../../environment":15,"../ndarray":94}],60:[function(require,module,exports){
+},{"../ops/ops":123,"../tensor":146,"../util":151}],71:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var MatrixOrientation;
@@ -8787,7 +10991,7 @@ var MatrixOrientation;
     MatrixOrientation[MatrixOrientation["TRANSPOSED"] = 1] = "TRANSPOSED";
 })(MatrixOrientation = exports.MatrixOrientation || (exports.MatrixOrientation = {}));
 
-},{}],61:[function(require,module,exports){
+},{}],72:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var ArgMinMaxProgram = (function () {
@@ -8811,10 +11015,30 @@ var ArgMinMaxProgram = (function () {
 }());
 exports.ArgMinMaxProgram = ArgMinMaxProgram;
 
-},{}],62:[function(require,module,exports){
+},{}],73:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var broadcast_util = require("../../broadcast_util");
+var AvgPool2DBackpropProgram = (function () {
+    function AvgPool2DBackpropProgram(convInfo) {
+        this.variableNames = ['dy'];
+        this.outputShape = convInfo.inShape;
+        var filterHeight = convInfo.filterHeight;
+        var filterWidth = convInfo.filterWidth;
+        var strideHeight = convInfo.strideHeight;
+        var strideWidth = convInfo.strideWidth;
+        var padTop = filterHeight - 1 - convInfo.padInfo.top;
+        var padLeft = filterWidth - 1 - convInfo.padInfo.left;
+        var avgMultiplier = 1 / (filterHeight * filterWidth);
+        this.userCode = "\n      const ivec2 pads = ivec2(" + padTop + ", " + padLeft + ");\n      const float avgMultiplier = float(" + avgMultiplier + ");\n\n      void main() {\n        ivec4 coords = getOutputCoords();\n        int b = coords[0];\n        int d = coords[3];\n\n        ivec2 dyRCCorner = coords.yz - pads;\n        int dyRCorner = dyRCCorner.x;\n        int dyCCorner = dyRCCorner.y;\n\n        // Convolve dy(?, ?, d) with pos mask(:, :, d) to get dx(xR, xC, d).\n        // ? = to be determined. : = across all values in that axis.\n        float dotProd = 0.0;\n        for (int wR = 0; wR < " + filterHeight + "; wR++) {\n          float dyR = float(dyRCorner + wR) / " + strideHeight + ".0;\n\n          if (dyR < 0.0 || dyR >= " + convInfo.outHeight + ".0 || fract(dyR) > 0.0) {\n            continue;\n          }\n          int idyR = int(dyR);\n\n          for (int wC = 0; wC < " + filterWidth + "; wC++) {\n            float dyC = float(dyCCorner + wC) / " + strideWidth + ".0;\n\n            if (dyC < 0.0 || dyC >= " + convInfo.outWidth + ".0 ||\n                fract(dyC) > 0.0) {\n              continue;\n            }\n            int idyC = int(dyC);\n\n            float dyValue = getDy(b, idyR, idyC, d);\n\n            dotProd += dyValue * avgMultiplier;\n          }\n        }\n        setOutput(dotProd);\n      }\n    ";
+    }
+    return AvgPool2DBackpropProgram;
+}());
+exports.AvgPool2DBackpropProgram = AvgPool2DBackpropProgram;
+
+},{}],74:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var broadcast_util = require("../../ops/broadcast_util");
 var BatchNormProgram = (function () {
     function BatchNormProgram(xShape, meanShape, varianceShape, offsetShape, scaleShape, varianceEpsilon) {
         this.outputShape = [];
@@ -8841,10 +11065,10 @@ var BatchNormProgram = (function () {
 }());
 exports.BatchNormProgram = BatchNormProgram;
 
-},{"../../broadcast_util":89}],63:[function(require,module,exports){
+},{"../../ops/broadcast_util":110}],75:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var broadcast_util = require("../../broadcast_util");
+var broadcast_util = require("../../ops/broadcast_util");
 var CHECK_NAN_SNIPPET = "\n  if (isNaN(a)) return a;\n  if (isNaN(b)) return b;\n";
 exports.ADD = 'return a + b;';
 exports.SUB = 'return a - b;';
@@ -8852,6 +11076,14 @@ exports.MUL = 'return a * b;';
 exports.DIV = 'return a / b;';
 exports.POW = "\n  return (round(mod(b, 2.0)) == 0 || round(mod(b, 2.0)) == 2) ?\n      pow(abs(a), b) : sign(a) * pow(abs(a), b);\n";
 exports.EQUAL = CHECK_NAN_SNIPPET + "\n  return float(a == b);\n";
+exports.NOT_EQUAL = CHECK_NAN_SNIPPET + "\n  return float(a != b);\n";
+exports.LESS = CHECK_NAN_SNIPPET + "\n  return float(a < b);\n";
+exports.LESS_EQUAL = CHECK_NAN_SNIPPET + "\n  return float(a <= b);\n";
+exports.GREATER = CHECK_NAN_SNIPPET + "\n  return float(a > b);\n";
+exports.GREATER_EQUAL = CHECK_NAN_SNIPPET + "\n  return float(a >= b);\n";
+exports.LOGICAL_AND = CHECK_NAN_SNIPPET + "\n  return float(a >= 1.0 && b >= 1.0);\n";
+exports.LOGICAL_OR = CHECK_NAN_SNIPPET + "\n  return float(a >= 1.0 || b >= 1.0);\n";
+exports.LOGICAL_XOR = CHECK_NAN_SNIPPET + "\n  return float(a >= 1.0 ^^ b >= 1.0);\n";
 exports.PRELU = "\n  return (a >= 0.0) ? a : b * a;\n";
 exports.PRELU_DER = "\n  return (a > 0.0) ? 1.0 : ((a < 0.0) ? b : a);\n";
 exports.MAX = CHECK_NAN_SNIPPET + "\n  return max(a, b);\n";
@@ -8868,7 +11100,7 @@ var BinaryOpProgram = (function () {
 }());
 exports.BinaryOpProgram = BinaryOpProgram;
 
-},{"../../broadcast_util":89}],64:[function(require,module,exports){
+},{"../../ops/broadcast_util":110}],76:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var ClipProgram = (function () {
@@ -8883,61 +11115,23 @@ var ClipProgram = (function () {
 }());
 exports.ClipProgram = ClipProgram;
 
-},{}],65:[function(require,module,exports){
+},{}],77:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var concat_util = require("../../concat_util");
-var shader_compiler_1 = require("./shader_compiler");
+var concat_util = require("../../ops/concat_util");
 var ConcatProgram = (function () {
-    function ConcatProgram(aShape, bShape, axis) {
+    function ConcatProgram(aShape, bShape) {
         this.variableNames = ['A', 'B'];
         this.outputShape = [];
-        var yAxes = ['yR', 'yC', 'yD', 'yW'];
-        var concatAxis = yAxes[axis];
-        this.outputShape = concat_util.computeOutShape(aShape, bShape, axis);
-        var dType = shader_compiler_1.getCoordsDataType(aShape.length);
-        var unpackSnippet = getUnpack(aShape.length);
-        var sampleCoords = getSampleCoords(aShape.length);
-        this.userCode = "\n      void main() {\n        " + dType + " coords = getOutputCoords();\n        " + unpackSnippet + "\n\n        float value = 0.0;\n        if (" + concatAxis + " < " + aShape[axis] + ") {\n          value = getA(" + sampleCoords + ");\n        } else {\n          " + concatAxis + " -= " + aShape[axis] + ";\n          value = getB(" + sampleCoords + ");\n        }\n\n        setOutput(value);\n      }\n    ";
+        this.outputShape =
+            concat_util.computeOutShape(aShape, bShape, 1);
+        this.userCode = "\n      void main() {\n        ivec2 coords = getOutputCoords();\n        int yR = coords.x;\n        int yC = coords.y;\n\n        float value = 0.0;\n        if (yC < " + aShape[1] + ") {\n          value = getA(yR, yC);\n        } else {\n          yC -= " + aShape[1] + ";\n          value = getB(yR, yC);\n        }\n\n        setOutput(value);\n      }\n    ";
     }
     return ConcatProgram;
 }());
 exports.ConcatProgram = ConcatProgram;
-function getSampleCoords(rank) {
-    if (rank === 1) {
-        return 'yR';
-    }
-    else if (rank === 2) {
-        return 'yR, yC';
-    }
-    else if (rank === 3) {
-        return 'yR, yC, yD';
-    }
-    else if (rank === 4) {
-        return 'yR, yC, yD, yW';
-    }
-    else {
-        throw Error("Concat for rank " + rank + " is not yet supported");
-    }
-}
-function getUnpack(rank) {
-    var res = rank === 1 ? 'int yR = coords;' : 'int yR = coords.x;';
-    if (rank > 1) {
-        res += '\nint yC = coords.y;';
-    }
-    if (rank > 2) {
-        res += '\nint yD = coords.z;';
-    }
-    if (rank > 3) {
-        res += '\nint yW = coords.w;';
-    }
-    if (rank > 4) {
-        throw Error("Concat for rank " + rank + " is not yet supported");
-    }
-    return res;
-}
 
-},{"../../concat_util":90,"./shader_compiler":81}],66:[function(require,module,exports){
+},{"../../ops/concat_util":113}],78:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var Conv2DDerFilterProgram = (function () {
@@ -8968,28 +11162,14 @@ var Conv2DDerInputProgram = (function () {
     return Conv2DDerInputProgram;
 }());
 exports.Conv2DDerInputProgram = Conv2DDerInputProgram;
-var Conv2DDerBiasProgram = (function () {
-    function Conv2DDerBiasProgram(yShape) {
-        this.variableNames = ['dy'];
-        var batchSize = yShape[0], yNumRows = yShape[1], yNumCols = yShape[2], outputDepth = yShape[3];
-        this.outputShape = [outputDepth];
-        this.userCode = "\n      void main() {\n        int d2 = getOutputCoords();\n\n        float derBias = 0.0;\n        for (int b = 0; b < " + batchSize + "; b++) {\n          for (int yR = 0; yR < " + yNumRows + "; yR++) {\n            for (int yC = 0; yC < " + yNumCols + "; yC++) {\n              derBias += getDy(b, yR, yC, d2);\n            }\n          }\n        }\n        setOutput(derBias);\n      }\n    ";
-    }
-    return Conv2DDerBiasProgram;
-}());
-exports.Conv2DDerBiasProgram = Conv2DDerBiasProgram;
 
-},{}],67:[function(require,module,exports){
+},{}],79:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var Conv2DProgram = (function () {
-    function Conv2DProgram(convInfo, hasBias) {
+    function Conv2DProgram(convInfo) {
         this.variableNames = ['x', 'W'];
-        if (hasBias) {
-            this.variableNames.push('bias');
-        }
         this.outputShape = convInfo.outShape;
-        var biasSnippet = hasBias ? 'dotProd += getBias(d2);' : '';
         var padTop = convInfo.padInfo.top;
         var padLeft = convInfo.padInfo.left;
         var strideHeight = convInfo.strideHeight;
@@ -8998,13 +11178,13 @@ var Conv2DProgram = (function () {
         var filterWidth = convInfo.filterWidth;
         var inputDepthNearestVec4 = Math.floor(convInfo.inChannels / 4) * 4;
         var inputDepthVec4Remainder = convInfo.inChannels % 4;
-        this.userCode = "\n      const ivec2 strides = ivec2(" + strideHeight + ", " + strideWidth + ");\n      const ivec2 pads = ivec2(" + padTop + ", " + padLeft + ");\n\n      void main() {\n        ivec4 coords = getOutputCoords();\n        int batch = coords[0];\n        int d2 = coords[3];\n\n        ivec2 xRCCorner = coords.yz * strides - pads;\n        int xRCorner = xRCCorner.x;\n        int xCCorner = xRCCorner.y;\n\n        // Convolve x(?, ?, d1) with w(:, :, d1, d2) to get y(yR, yC, d2).\n        // ? = to be determined. : = across all values in that axis.\n        float dotProd = 0.0;\n        for (int wR = 0; wR < " + filterHeight + "; wR++) {\n          int xR = xRCorner + wR;\n\n          if (xR < 0 || xR >= " + convInfo.inHeight + ") {\n            continue;\n          }\n\n          for (int wC = 0; wC < " + filterWidth + "; wC++) {\n            int xC = xCCorner + wC;\n\n            if (xC < 0 || xC >= " + convInfo.inWidth + ") {\n              continue;\n            }\n\n            for (int d1 = 0; d1 < " + inputDepthNearestVec4 + "; d1 += 4) {\n              vec4 xValues = vec4(\n                getX(batch, xR, xC, d1),\n                getX(batch, xR, xC, d1 + 1),\n                getX(batch, xR, xC, d1 + 2),\n                getX(batch, xR, xC, d1 + 3)\n              );\n              vec4 wValues = vec4(\n                getW(wR, wC, d1, d2),\n                getW(wR, wC, d1 + 1, d2),\n                getW(wR, wC, d1 + 2, d2),\n                getW(wR, wC, d1 + 3, d2)\n              );\n\n              dotProd += dot(xValues, wValues);\n            }\n\n            if (" + (inputDepthVec4Remainder === 1) + ") {\n              dotProd +=\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + ") *\n                getW(wR, wC, " + inputDepthNearestVec4 + ", d2);\n            } else if (" + (inputDepthVec4Remainder === 2) + ") {\n              vec2 xValues = vec2(\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + "),\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + " + 1)\n              );\n              vec2 wValues = vec2(\n                getW(wR, wC, " + inputDepthNearestVec4 + ", d2),\n                getW(wR, wC, " + inputDepthNearestVec4 + " + 1, d2)\n              );\n              dotProd += dot(xValues, wValues);\n            } else if (" + (inputDepthVec4Remainder === 3) + ") {\n              vec3 xValues = vec3(\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + "),\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + " + 1),\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + " + 2)\n              );\n              vec3 wValues = vec3(\n                getW(wR, wC, " + inputDepthNearestVec4 + ", d2),\n                getW(wR, wC, " + inputDepthNearestVec4 + " + 1, d2),\n                getW(wR, wC, " + inputDepthNearestVec4 + " + 2, d2)\n              );\n              dotProd += dot(xValues, wValues);\n            }\n          }\n        }\n        " + biasSnippet + "\n        setOutput(dotProd);\n      }\n    ";
+        this.userCode = "\n      const ivec2 strides = ivec2(" + strideHeight + ", " + strideWidth + ");\n      const ivec2 pads = ivec2(" + padTop + ", " + padLeft + ");\n\n      void main() {\n        ivec4 coords = getOutputCoords();\n        int batch = coords[0];\n        int d2 = coords[3];\n\n        ivec2 xRCCorner = coords.yz * strides - pads;\n        int xRCorner = xRCCorner.x;\n        int xCCorner = xRCCorner.y;\n\n        // Convolve x(?, ?, d1) with w(:, :, d1, d2) to get y(yR, yC, d2).\n        // ? = to be determined. : = across all values in that axis.\n        float dotProd = 0.0;\n        for (int wR = 0; wR < " + filterHeight + "; wR++) {\n          int xR = xRCorner + wR;\n\n          if (xR < 0 || xR >= " + convInfo.inHeight + ") {\n            continue;\n          }\n\n          for (int wC = 0; wC < " + filterWidth + "; wC++) {\n            int xC = xCCorner + wC;\n\n            if (xC < 0 || xC >= " + convInfo.inWidth + ") {\n              continue;\n            }\n\n            for (int d1 = 0; d1 < " + inputDepthNearestVec4 + "; d1 += 4) {\n              vec4 xValues = vec4(\n                getX(batch, xR, xC, d1),\n                getX(batch, xR, xC, d1 + 1),\n                getX(batch, xR, xC, d1 + 2),\n                getX(batch, xR, xC, d1 + 3)\n              );\n              vec4 wValues = vec4(\n                getW(wR, wC, d1, d2),\n                getW(wR, wC, d1 + 1, d2),\n                getW(wR, wC, d1 + 2, d2),\n                getW(wR, wC, d1 + 3, d2)\n              );\n\n              dotProd += dot(xValues, wValues);\n            }\n\n            if (" + (inputDepthVec4Remainder === 1) + ") {\n              dotProd +=\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + ") *\n                getW(wR, wC, " + inputDepthNearestVec4 + ", d2);\n            } else if (" + (inputDepthVec4Remainder === 2) + ") {\n              vec2 xValues = vec2(\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + "),\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + " + 1)\n              );\n              vec2 wValues = vec2(\n                getW(wR, wC, " + inputDepthNearestVec4 + ", d2),\n                getW(wR, wC, " + inputDepthNearestVec4 + " + 1, d2)\n              );\n              dotProd += dot(xValues, wValues);\n            } else if (" + (inputDepthVec4Remainder === 3) + ") {\n              vec3 xValues = vec3(\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + "),\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + " + 1),\n                getX(batch, xR, xC, " + inputDepthNearestVec4 + " + 2)\n              );\n              vec3 wValues = vec3(\n                getW(wR, wC, " + inputDepthNearestVec4 + ", d2),\n                getW(wR, wC, " + inputDepthNearestVec4 + " + 1, d2),\n                getW(wR, wC, " + inputDepthNearestVec4 + " + 2, d2)\n              );\n              dotProd += dot(xValues, wValues);\n            }\n          }\n        }\n        setOutput(dotProd);\n      }\n    ";
     }
     return Conv2DProgram;
 }());
 exports.Conv2DProgram = Conv2DProgram;
 
-},{}],68:[function(require,module,exports){
+},{}],80:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var DepthwiseConv2DProgram = (function () {
@@ -9026,29 +11206,60 @@ var DepthwiseConv2DProgram = (function () {
 }());
 exports.DepthwiseConv2DProgram = DepthwiseConv2DProgram;
 
-},{}],69:[function(require,module,exports){
+},{}],81:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var Copy2DProgram = (function () {
-    function Copy2DProgram(srcNumCols, destNumCols) {
-        this.variableNames = ['source'];
-        this.outputShape = null;
-        this.userCode = "\n      uniform ivec2 sourceStart;\n      uniform ivec2 destStart;\n\n      void main() {\n        ivec2 destCoords = getOutputCoords() - destStart;\n        int index = destCoords.x * " + destNumCols + " + destCoords.y;\n        int r = index / " + srcNumCols + ";\n        ivec2 sourceCoords = sourceStart + ivec2(r, index - r * " + srcNumCols + ");\n        setOutput(getSource(sourceCoords.x, sourceCoords.y));\n      }\n    ";
+var FromPixelsProgram = (function () {
+    function FromPixelsProgram(outputShape) {
+        this.variableNames = ['A'];
+        var height = outputShape[0], width = outputShape[1];
+        this.outputShape = outputShape;
+        this.userCode = "\n      void main() {\n        ivec3 coords = getOutputCoords();\n        int texR = coords[0];\n        int texC = coords[1];\n        int depth = coords[2];\n        vec2 uv = (vec2(texC, texR) + halfCR) / vec2(" + width + ".0, " + height + ".0);\n\n        vec4 values = texture2D(A, uv);\n        float value;\n        if (depth == 0) {\n          value = values.r;\n        } else if (depth == 1) {\n          value = values.g;\n        } else if (depth == 2) {\n          value = values.b;\n        } else if (depth == 3) {\n          value = values.a;\n        }\n\n        setOutput(floor(value * 255.0 + 0.5));\n      }\n    ";
     }
-    Copy2DProgram.prototype.getCustomSetupFunc = function (sourceStart, destStart, destSize) {
-        return function (gpgpu, webGLProgram) {
-            gpgpu.setOutputMatrixWriteRegion(destStart[0], destSize[0], destStart[1], destSize[1]);
-            var sourceStartCRLoc = gpgpu.getUniformLocation(webGLProgram, 'sourceStart');
-            gpgpu.gl.uniform2i(sourceStartCRLoc, sourceStart[0], sourceStart[1]);
-            var destStartCRLoc = gpgpu.getUniformLocation(webGLProgram, 'destStart');
-            gpgpu.gl.uniform2i(destStartCRLoc, destStart[0], destStart[1]);
-        };
-    };
-    return Copy2DProgram;
+    return FromPixelsProgram;
 }());
-exports.Copy2DProgram = Copy2DProgram;
+exports.FromPixelsProgram = FromPixelsProgram;
 
-},{}],70:[function(require,module,exports){
+},{}],82:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var shader_compiler_1 = require("./shader_compiler");
+var GatherProgram = (function () {
+    function GatherProgram(aShape, indicesLength, axis) {
+        this.variableNames = ['A', 'indices'];
+        var outputShape = aShape.slice();
+        outputShape[axis] = indicesLength;
+        this.outputShape = outputShape;
+        this.rank = outputShape.length;
+        var dtype = shader_compiler_1.getCoordsDataType(this.rank);
+        var sourceCoords = getSourceCoords(aShape, axis);
+        this.userCode = "\n      void main() {\n        " + dtype + " resRC = getOutputCoords();\n        setOutput(getA(" + sourceCoords + "));\n      }\n    ";
+    }
+    return GatherProgram;
+}());
+exports.GatherProgram = GatherProgram;
+function getSourceCoords(aShape, axis) {
+    var rank = aShape.length;
+    if (rank > 4) {
+        throw Error("Gather for rank " + rank + " is not yet supported");
+    }
+    if (rank === 1) {
+        return "int(getIndices(resRC))";
+    }
+    var currentCoords = ['resRC.x', 'resRC.y', 'resRC.z', 'resRC.w'];
+    var sourceCoords = [];
+    for (var i = 0; i < aShape.length; i++) {
+        if (i === axis) {
+            sourceCoords.push("int(getIndices(" + currentCoords[i] + "))");
+        }
+        else {
+            sourceCoords.push("" + currentCoords[i]);
+        }
+    }
+    return sourceCoords.join();
+}
+
+},{"./shader_compiler":97}],83:[function(require,module,exports){
 "use strict";
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -9086,8 +11297,8 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-var environment_1 = require("../../../environment");
-var util = require("../../../util");
+var environment_1 = require("../../environment");
+var util = require("../../util");
 var gpgpu_util = require("./gpgpu_util");
 var tex_util = require("./tex_util");
 var webgl_util = require("./webgl_util");
@@ -9125,7 +11336,9 @@ var GPGPUContext = (function () {
     }
     GPGPUContext.prototype.dispose = function () {
         var _this = this;
-        this.throwIfDisposed();
+        if (this.disposed) {
+            return;
+        }
         if (this.program != null) {
             console.warn('Disposing a GPGPUContext that still has a bound WebGLProgram.' +
                 ' This is probably a resource leak, delete the program with ' +
@@ -9241,9 +11454,15 @@ var GPGPUContext = (function () {
         }
         webgl_util.callAndCheck(this.gl, function () { return _this.gl.useProgram(program); });
     };
-    GPGPUContext.prototype.getUniformLocation = function (program, uniformName) {
+    GPGPUContext.prototype.getUniformLocation = function (program, uniformName, shouldThrow) {
+        if (shouldThrow === void 0) { shouldThrow = true; }
         this.throwIfDisposed();
-        return webgl_util.getProgramUniformLocationOrThrow(this.gl, program, uniformName);
+        if (shouldThrow) {
+            return webgl_util.getProgramUniformLocationOrThrow(this.gl, program, uniformName);
+        }
+        else {
+            return webgl_util.getProgramUniformLocation(this.gl, program, uniformName);
+        }
     };
     GPGPUContext.prototype.getAttributeLocation = function (program, attribute) {
         var _this = this;
@@ -9294,61 +11513,98 @@ var GPGPUContext = (function () {
         this.throwIfDisposed();
         webgl_util.callAndCheck(this.gl, function () { return _this.gl.finish(); });
     };
-    GPGPUContext.prototype.runQuery = function (queryFn) {
-        if (environment_1.ENV.get('WEBGL_VERSION') === 2) {
-            return this.runQueryWebGL2(queryFn);
+    GPGPUContext.prototype.getQueryTimerExtension = function () {
+        if (this.disjointQueryTimerExtension == null) {
+            this.disjointQueryTimerExtension =
+                webgl_util.getExtensionOrThrow(this.gl, environment_1.ENV.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_VERSION') === 2 ?
+                    'EXT_disjoint_timer_query_webgl2' :
+                    'EXT_disjoint_timer_query');
         }
-        return this.runQueryWebGL1(queryFn);
+        return this.disjointQueryTimerExtension;
     };
-    GPGPUContext.prototype.runQueryWebGL2 = function (benchmark) {
+    GPGPUContext.prototype.getQueryTimerExtensionWebGL2 = function () {
+        return this.getQueryTimerExtension();
+    };
+    GPGPUContext.prototype.getQueryTimerExtensionWebGL1 = function () {
+        return this.getQueryTimerExtension();
+    };
+    GPGPUContext.prototype.runQuery = function (queryFn) {
+        var query = this.beginQuery();
+        queryFn();
+        this.endQuery();
+        return this.pollQueryTime(query);
+    };
+    GPGPUContext.prototype.beginQuery = function () {
+        if (environment_1.ENV.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_VERSION') === 2) {
+            var gl2 = this.gl;
+            var ext = this.getQueryTimerExtensionWebGL2();
+            var query = gl2.createQuery();
+            gl2.beginQuery(ext.TIME_ELAPSED_EXT, query);
+            return query;
+        }
+        else {
+            var ext = this.getQueryTimerExtensionWebGL1();
+            var query = ext.createQueryEXT();
+            ext.beginQueryEXT(ext.TIME_ELAPSED_EXT, query);
+            return query;
+        }
+    };
+    GPGPUContext.prototype.endQuery = function () {
+        if (environment_1.ENV.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_VERSION') === 2) {
+            var gl2 = this.gl;
+            var ext = this.getQueryTimerExtensionWebGL2();
+            gl2.endQuery(ext.TIME_ELAPSED_EXT);
+        }
+        else {
+            var ext = this.getQueryTimerExtensionWebGL1();
+            ext.endQueryEXT(ext.TIME_ELAPSED_EXT);
+        }
+    };
+    GPGPUContext.prototype.isQueryAvailable = function (query, queryTimerVersion) {
+        if (queryTimerVersion === 0) {
+            return true;
+        }
+        if (queryTimerVersion === 2) {
+            var gl2 = this.gl;
+            var ext = this.getQueryTimerExtensionWebGL2();
+            var available = gl2.getQueryParameter(query, gl2.QUERY_RESULT_AVAILABLE);
+            var disjoint = this.gl.getParameter(ext.GPU_DISJOINT_EXT);
+            return available && !disjoint;
+        }
+        else {
+            var ext = this.getQueryTimerExtensionWebGL1();
+            var available = ext.getQueryObjectEXT(query, ext.QUERY_RESULT_AVAILABLE_EXT);
+            var disjoint = this.gl.getParameter(ext.GPU_DISJOINT_EXT);
+            return available && !disjoint;
+        }
+    };
+    GPGPUContext.prototype.pollQueryTime = function (query) {
         var _this = this;
-        var ext = webgl_util.getExtensionOrThrow(this.gl, 'EXT_disjoint_timer_query_webgl2');
-        var query = this.gl.createQuery();
-        this.gl.beginQuery(ext.TIME_ELAPSED_EXT, query);
-        benchmark();
-        this.gl.endQuery(ext.TIME_ELAPSED_EXT);
         return new Promise(function (resolve, reject) {
-            var queryGPU = function () {
-                var available = _this.gl
-                    .getQueryParameter(query, _this.gl.QUERY_RESULT_AVAILABLE);
-                var disjoint = _this.gl.getParameter(ext.GPU_DISJOINT_EXT);
-                return available && !disjoint;
-            };
-            var getTimeElapsed = function () {
-                var timeElapsedNanos = _this.gl
-                    .getQueryParameter(query, _this.gl.QUERY_RESULT);
-                resolve(timeElapsedNanos / 1000000);
-            };
             var resolveWithWarning = function () {
                 console.warn('Disjoint query timer never available.');
                 resolve(-1);
             };
-            util.repeatedTry(queryGPU).then(getTimeElapsed).catch(resolveWithWarning);
+            var queryTimerVersion = environment_1.ENV.get('WEBGL_DISJOINT_QUERY_TIMER_EXTENSION_VERSION');
+            util.repeatedTry(function () { return _this.isQueryAvailable(query, queryTimerVersion); })
+                .then(function () { return resolve(_this.getQueryTime(query, queryTimerVersion)); })
+                .catch(resolveWithWarning);
         });
     };
-    GPGPUContext.prototype.runQueryWebGL1 = function (benchmark) {
-        var _this = this;
-        var ext = webgl_util.getExtensionOrThrow(this.gl, 'EXT_disjoint_timer_query');
-        var query = ext.createQueryEXT();
-        ext.beginQueryEXT(ext.TIME_ELAPSED_EXT, query);
-        benchmark();
-        ext.endQueryEXT(ext.TIME_ELAPSED_EXT);
-        return new Promise(function (resolve, reject) {
-            var queryGPU = function () {
-                var available = ext.getQueryObjectEXT(query, ext.QUERY_RESULT_AVAILABLE_EXT);
-                var disjoint = _this.gl.getParameter(ext.GPU_DISJOINT_EXT);
-                return available && !disjoint;
-            };
-            var getTimeElapsed = function () {
-                var timeElapsedNanos = ext.getQueryObjectEXT(query, ext.QUERY_RESULT_EXT);
-                resolve(timeElapsedNanos / 1000000);
-            };
-            var resolveWithWarning = function () {
-                console.warn('Disjoint query timer never available.');
-                resolve(-1);
-            };
-            util.repeatedTry(queryGPU).then(getTimeElapsed).catch(resolveWithWarning);
-        });
+    GPGPUContext.prototype.getQueryTime = function (query, queryTimerVersion) {
+        if (queryTimerVersion === 0) {
+            return null;
+        }
+        if (queryTimerVersion === 2) {
+            var gl2 = this.gl;
+            var timeElapsedNanos = gl2.getQueryParameter(query, gl2.QUERY_RESULT);
+            return timeElapsedNanos / 1000000;
+        }
+        else {
+            var ext = this.getQueryTimerExtensionWebGL1();
+            var timeElapsedNanos = ext.getQueryObjectEXT(query, ext.QUERY_RESULT_EXT);
+            return timeElapsedNanos / 1000000;
+        }
     };
     GPGPUContext.prototype.downloadMatrixDriverSetup = function (texture) {
         this.throwIfDisposed();
@@ -9420,11 +11676,11 @@ var GPGPUContext = (function () {
 }());
 exports.GPGPUContext = GPGPUContext;
 
-},{"../../../environment":15,"../../../util":100,"./gpgpu_util":72,"./tex_util":83,"./webgl_util":88}],71:[function(require,module,exports){
+},{"../../environment":34,"../../util":151,"./gpgpu_util":85,"./tex_util":99,"./webgl_util":104}],84:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var environment_1 = require("../../../environment");
-var util = require("../../../util");
+var environment_1 = require("../../environment");
+var util = require("../../util");
 var shader_compiler = require("./shader_compiler");
 var ATTRIBUTE_NAMES = ['uv', 'clipSpacePos'];
 var NAN_UNIFORM_NAME = 'NaN';
@@ -9435,17 +11691,15 @@ function compileProgram(gpgpu, program, inputs, output) {
     var userCode = program.userCode;
     var inputInfos = inputs.map(function (input, i) {
         var shapeInfo = {
-            logicalShape: input.array.shape,
-            texShape: input.texData.texShape,
-            textureType: input.texData.textureType
+            logicalShape: input.tensor.shape,
+            texShape: input.texData.texShape
         };
         return { name: program.variableNames[i], shapeInfo: shapeInfo };
     });
     var inShapeInfos = inputInfos.map(function (x) { return x.shapeInfo; });
     var outShapeInfo = {
-        logicalShape: output.array.shape,
-        texShape: output.texData.texShape,
-        textureType: output.texData.textureType
+        logicalShape: output.tensor.shape,
+        texShape: output.texData.texShape
     };
     var source = shader_compiler.makeShader(inputInfos, outShapeInfo, userCode, program.supportsBroadcasting === true);
     var webGLProgram = gpgpu.createProgram(source);
@@ -9461,8 +11715,8 @@ function compileProgram(gpgpu, program, inputs, output) {
             gpgpu.getAttributeLocation(webGLProgram, attribute);
     });
     if (shouldUploadNaNUniform()) {
-        uniformLocations[NAN_UNIFORM_NAME] =
-            gpgpu.getUniformLocation(webGLProgram, NAN_UNIFORM_NAME);
+        var throwIfNaNUniformIsNotUsed = false;
+        uniformLocations[NAN_UNIFORM_NAME] = gpgpu.getUniformLocation(webGLProgram, NAN_UNIFORM_NAME, throwIfNaNUniformIsNotUsed);
     }
     return {
         program: program,
@@ -9484,7 +11738,7 @@ function validateBinaryAndProgram(shapeInfos, inputs) {
     shapeInfos.forEach(function (s, i) {
         var shapeA = s.logicalShape;
         var texShapeA = s.texShape;
-        var shapeB = inputs[i].array.shape;
+        var shapeB = inputs[i].tensor.shape;
         var texShapeB = inputs[i].texData.texShape;
         if (!util.arraysEqual(shapeA, shapeB)) {
             throw Error("Binary was compiled with different shapes than " +
@@ -9522,7 +11776,7 @@ exports.runProgram = runProgram;
 function makeShaderKey(program, inputs, output) {
     var keyInputs = '';
     inputs.concat(output).forEach(function (x) {
-        keyInputs += x.array.shape + "_" + x.texData.texShape;
+        keyInputs += x.tensor.shape + "_" + x.texData.texShape;
     });
     var keyUserCode = program.userCode;
     var keyBroadcast = (program.supportsBroadcasting === true).toString();
@@ -9532,7 +11786,7 @@ function makeShaderKey(program, inputs, output) {
 }
 exports.makeShaderKey = makeShaderKey;
 
-},{"../../../environment":15,"../../../util":100,"./shader_compiler":81}],72:[function(require,module,exports){
+},{"../../environment":34,"../../util":151,"./shader_compiler":97}],85:[function(require,module,exports){
 "use strict";
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -9570,7 +11824,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-var environment_1 = require("../../../environment");
+var environment_1 = require("../../environment");
 var tex_util = require("./tex_util");
 var webgl_util = require("./webgl_util");
 function getWebGLContextAttributes() {
@@ -9814,7 +12068,78 @@ function downloadMatrixFromPackedOutputTexture(gl, rows, columns) {
 }
 exports.downloadMatrixFromPackedOutputTexture = downloadMatrixFromPackedOutputTexture;
 
-},{"../../../environment":15,"./tex_util":83,"./webgl_util":88}],73:[function(require,module,exports){
+},{"../../environment":34,"./tex_util":99,"./webgl_util":104}],86:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var shader_compiler_1 = require("./shader_compiler");
+var WhereProgram = (function () {
+    function WhereProgram(cRank, shape, rank) {
+        this.variableNames = ['c', 'a', 'b'];
+        this.outputShape = shape;
+        var cCoords;
+        var abCoords;
+        if (rank > 4) {
+            throw Error("Where for rank " + rank + " is not yet supported");
+        }
+        if (rank === 1) {
+            abCoords = "resRC";
+            cCoords = "resRC";
+        }
+        else {
+            var currentCoords = ['resRC.x', 'resRC.y', 'resRC.z', 'resRC.w'];
+            var cCoordVars = [];
+            var abCoordVars = [];
+            for (var i = 0; i < shape.length; i++) {
+                abCoordVars.push("" + currentCoords[i]);
+                if (i < cRank) {
+                    cCoordVars.push("" + currentCoords[i]);
+                }
+            }
+            cCoords = cCoordVars.join();
+            abCoords = abCoordVars.join();
+        }
+        var dtype = shader_compiler_1.getCoordsDataType(rank);
+        this.userCode = "\n      void main() {\n        " + dtype + " resRC = getOutputCoords();\n        float cVal = getC(" + cCoords + ");\n        if (cVal >= 1.0) {\n          setOutput(getA(" + abCoords + "));\n        } else {\n          setOutput(getB(" + abCoords + "));\n        }\n      }\n    ";
+    }
+    return WhereProgram;
+}());
+exports.WhereProgram = WhereProgram;
+
+},{"./shader_compiler":97}],87:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var LRNProgram = (function () {
+    function LRNProgram(xShape, radius, bias, alpha, beta, normRegion) {
+        this.variableNames = ['x'];
+        this.outputShape = [];
+        var rad = radius;
+        var maxW = xShape[1] - 1;
+        var maxH = xShape[2] - 1;
+        var maxD = xShape[3] - 1;
+        this.outputShape = xShape;
+        var powOperator;
+        var basis = "float(" + bias + ") + float(" + alpha + ") * sum";
+        if (beta === 0.5) {
+            powOperator = "inversesqrt(" + basis + ")";
+        }
+        else if (beta === 1.0) {
+            powOperator = "1.0/(" + basis + ")";
+        }
+        else {
+            powOperator = "exp(log(" + basis + ") * float(-" + beta + "));";
+        }
+        if (normRegion === 'withinChannel') {
+            this.userCode = "\n        void main() {\n          ivec4 coords = getOutputCoords();\n          int b = coords[0];\n          int r = coords[1];\n          int c = coords[2];\n          int d = coords[3];\n          float x = getX(b, r, c, d);\n          float sum = 0.0;\n          for (int u = -" + rad + "; u <= " + rad + "; u++) {\n            for (int v = -" + rad + "; v <= " + rad + "; v++) {\n              int idx = r + u;\n              int idy = c + v;\n              if (idx >= 0 && idx <= " + maxW + " && idy >= 0 && idy <= " + maxH + ") {\n                float z = getX(b, idx, idy, d);\n                sum += z * z;\n              }\n            }\n          }\n          float val = x * " + powOperator + ";\n          setOutput(val);\n        }\n      ";
+        }
+        else {
+            this.userCode = "\n        void main() {\n          ivec4 coords = getOutputCoords();\n          int b = coords[0];\n          int r = coords[1];\n          int c = coords[2];\n          int d = coords[3];\n          float x = getX(b, r, c, d);\n          float sum = 0.0;\n          for (int j = -" + rad + "; j <= " + rad + "; j++) {\n            int idx = d + j;\n            if (idx >= 0 && idx <=  " + maxD + ") {\n              float z = getX(b, r, c, idx);\n              sum += z * z;\n            }\n          }\n          float val = x * " + powOperator + ";\n          setOutput(val);\n        }\n      ";
+        }
+    }
+    return LRNProgram;
+}());
+exports.LRNProgram = LRNProgram;
+
+},{}],88:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var MaxPool2DBackpropProgram = (function () {
@@ -9834,28 +12159,25 @@ var MaxPool2DBackpropProgram = (function () {
 }());
 exports.MaxPool2DBackpropProgram = MaxPool2DBackpropProgram;
 
-},{}],74:[function(require,module,exports){
+},{}],89:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var matmul_1 = require("../types/matmul");
 var MatMulProgram = (function () {
-    function MatMulProgram(aShape, bShape, aOrient, bOrient) {
-        if (aOrient === void 0) { aOrient = matmul_1.MatrixOrientation.REGULAR; }
-        if (bOrient === void 0) { bOrient = matmul_1.MatrixOrientation.REGULAR; }
+    function MatMulProgram(aShape, bShape, transposeA, transposeB) {
+        if (transposeA === void 0) { transposeA = false; }
+        if (transposeB === void 0) { transposeB = false; }
         this.variableNames = ['matrixA', 'matrixB'];
-        var outerShapeA = (aOrient === matmul_1.MatrixOrientation.REGULAR) ? aShape[0] : aShape[1];
-        var outerShapeB = (bOrient === matmul_1.MatrixOrientation.REGULAR) ? bShape[1] : bShape[0];
+        var outerShapeA = transposeA ? aShape[1] : aShape[0];
+        var outerShapeB = transposeB ? bShape[0] : bShape[1];
+        var sharedDim = transposeA ? aShape[0] : aShape[1];
         this.outputShape = [outerShapeA, outerShapeB];
-        var sharedDim = (aOrient === matmul_1.MatrixOrientation.REGULAR ? aShape[1] : aShape[0]);
         var aSnippetFromOffset = function (vec4Offset, indexVar) {
-            return (aOrient === matmul_1.MatrixOrientation.REGULAR) ?
-                "aRow, " + indexVar + " + " + vec4Offset :
-                indexVar + " + " + vec4Offset + ", aRow";
+            return transposeA ? indexVar + " + " + vec4Offset + ", aRow" :
+                "aRow, " + indexVar + " + " + vec4Offset;
         };
         var bSnippetFromOffset = function (vec4Offset, indexVar) {
-            return (bOrient === matmul_1.MatrixOrientation.REGULAR) ?
-                indexVar + " + " + vec4Offset + ", bCol" :
-                "bCol, " + indexVar + " + " + vec4Offset;
+            return transposeB ? "bCol, " + indexVar + " + " + vec4Offset :
+                indexVar + " + " + vec4Offset + ", bCol";
         };
         var sharedDimNearestVec4 = Math.floor(sharedDim / 4) * 4;
         var sharedDimVec4Remainder = sharedDim % 4;
@@ -9865,7 +12187,7 @@ var MatMulProgram = (function () {
 }());
 exports.MatMulProgram = MatMulProgram;
 
-},{"../types/matmul":60}],75:[function(require,module,exports){
+},{}],90:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var MultinomialProgram = (function () {
@@ -9887,7 +12209,7 @@ var MultinomialProgram = (function () {
 }());
 exports.MultinomialProgram = MultinomialProgram;
 
-},{}],76:[function(require,module,exports){
+},{}],91:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var OneHotProgram = (function () {
@@ -9896,20 +12218,45 @@ var OneHotProgram = (function () {
         this.outputShape = [numIndices, depth];
         this.userCode = "\n      void main() {\n        ivec2 coords = getOutputCoords();\n        int index = round(getIndices(coords.x));\n        setOutput(mix(float(" + offValue + "), float(" + onValue + "),\n                      float(index == coords.y)));\n      }\n    ";
     }
-    OneHotProgram.prototype.getCustomSetupFunc = function (seed) {
-        var _this = this;
-        return function (gpgpu, webGLProgram) {
-            if (_this.seedLoc == null) {
-                _this.seedLoc = gpgpu.getUniformLocation(webGLProgram, 'seed');
-            }
-            gpgpu.gl.uniform1f(_this.seedLoc, seed);
-        };
-    };
     return OneHotProgram;
 }());
 exports.OneHotProgram = OneHotProgram;
 
-},{}],77:[function(require,module,exports){
+},{}],92:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var Pad1DProgram = (function () {
+    function Pad1DProgram(xShape, paddings, constantValue) {
+        this.variableNames = ['x'];
+        var leftPadding = paddings[0];
+        var rightPadding = paddings[1];
+        this.outputShape = [leftPadding + xShape[0] + rightPadding];
+        this.rank = 1;
+        this.userCode = "\n      void main() {\n        int resRC = getOutputCoords();\n        if (resRC < " + leftPadding + " || resRC >= " + leftPadding + " + " + xShape[0] + ") {\n          setOutput(float(" + constantValue + "));\n        } else {\n          setOutput(getX(resRC - " + leftPadding + "));\n        }\n      }\n    ";
+    }
+    return Pad1DProgram;
+}());
+exports.Pad1DProgram = Pad1DProgram;
+var Pad2DProgram = (function () {
+    function Pad2DProgram(xShape, paddings, constantValue) {
+        this.variableNames = ['x'];
+        var topPadding = paddings[0][0];
+        var bottomPadding = paddings[0][1];
+        var leftPadding = paddings[1][0];
+        var rightPadding = paddings[1][1];
+        this.outputShape = [
+            topPadding + xShape[0] + bottomPadding,
+            leftPadding + xShape[1] + rightPadding
+        ];
+        this.rank = 2;
+        var sourceCoords = "resRC.x - " + topPadding + ", resRC.y - " + leftPadding;
+        this.userCode = "\n      void main() {\n        ivec2 resRC = getOutputCoords();\n        int topShape = " + topPadding + " + " + xShape[0] + ";\n        int leftShape = " + leftPadding + " + " + xShape[1] + ";\n        if (resRC.x < " + topPadding + " || resRC.x >= topShape ||\n            resRC.y < " + leftPadding + " || resRC.y >= leftShape) {\n          setOutput(float(" + constantValue + "));\n        } else {\n          setOutput(getX(" + sourceCoords + "));\n        }\n      }\n    ";
+    }
+    return Pad2DProgram;
+}());
+exports.Pad2DProgram = Pad2DProgram;
+
+},{}],93:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var Pool2DProgram = (function () {
@@ -9955,7 +12302,7 @@ var Pool2DProgram = (function () {
 }());
 exports.Pool2DProgram = Pool2DProgram;
 
-},{}],78:[function(require,module,exports){
+},{}],94:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var ReduceProgram = (function () {
@@ -9995,58 +12342,53 @@ var ReduceProgram = (function () {
 }());
 exports.ReduceProgram = ReduceProgram;
 
-},{}],79:[function(require,module,exports){
+},{}],95:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var webgl_util = require("./webgl_util");
-function getRenderRGBShader(gpgpu, destinationWidth) {
-    var fragmentShaderSource = "\n    precision highp float;\n    uniform sampler2D source;\n    varying vec2 resultUV;\n\n    const float destinationWidth = " + destinationWidth + ".0;\n    const float a = 1.0;\n\n    void main() {\n      float xr = floor(resultUV.s * destinationWidth) * 3.0;\n      vec3 x = xr + vec3(0, 1, 2);\n\n      float sourceWidth = destinationWidth * 3.0;\n      vec3 u = (x + 0.5) / sourceWidth;\n      float v = 1.0 - resultUV.t;\n\n      float r = texture2D(source, vec2(u[0], v)).r;\n      float g = texture2D(source, vec2(u[1], v)).r;\n      float b = texture2D(source, vec2(u[2], v)).r;\n\n      gl_FragColor = vec4(r, g, b, a);\n    }";
-    return gpgpu.createProgram(fragmentShaderSource);
-}
-exports.getRenderRGBShader = getRenderRGBShader;
-function renderToCanvas(gpgpu, renderShader, sourceTex) {
-    webgl_util.bindCanvasToFramebuffer(gpgpu.gl);
-    renderToFramebuffer(gpgpu, renderShader, sourceTex);
-}
-exports.renderToCanvas = renderToCanvas;
-function renderToFramebuffer(gpgpu, renderShader, sourceTex) {
-    gpgpu.setProgram(renderShader);
-    var sourceSamplerLocation = webgl_util.getProgramUniformLocationOrThrow(gpgpu.gl, renderShader, 'source');
-    gpgpu.setInputMatrixTexture(sourceTex, sourceSamplerLocation, 0);
-    gpgpu.executeProgram();
-}
-exports.renderToFramebuffer = renderToFramebuffer;
-
-},{"./webgl_util":88}],80:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var ResizeBilinear3DProgram = (function () {
-    function ResizeBilinear3DProgram(inputShape, outputDimensionsRowCol, alignCorners) {
+var ResizeBilinearProgram = (function () {
+    function ResizeBilinearProgram(inputShape, newHeight, newWidth, alignCorners) {
         this.variableNames = ['A'];
         this.outputShape = [];
-        var depth = inputShape[2];
-        this.outputShape =
-            [outputDimensionsRowCol[0], outputDimensionsRowCol[1], depth];
-        var effectiveInputShape = alignCorners ?
-            [inputShape[0] - 1, inputShape[1] - 1, depth] :
-            inputShape;
-        var effectiveOutputShape = alignCorners ?
-            [this.outputShape[0] - 1, this.outputShape[1] - 1, depth] :
-            this.outputShape;
-        this.userCode = "\n      const vec2 effectiveInputOverOutputRatioRC = vec2(\n          " + effectiveInputShape[0] / effectiveOutputShape[0] + ",\n          " + effectiveInputShape[1] / effectiveOutputShape[1] + ");\n      const vec2 inputShapeRC = vec2(" + inputShape[0] + ".0, " + inputShape[1] + ".0);\n\n      void main() {\n        ivec3 coords = getOutputCoords();\n        ivec2 yRC = coords.xy;\n        int d = coords.z;\n\n        // Fractional source index.\n        vec2 sourceFracIndexRC = vec2(yRC) * effectiveInputOverOutputRatioRC;\n\n        // Compute the four integer indices.\n        ivec2 sourceFloorRC = ivec2(sourceFracIndexRC);\n        ivec2 sourceCeilRC = ivec2(\n          min(inputShapeRC - 1.0, ceil(sourceFracIndexRC)));\n\n        float topLeft = getA(sourceFloorRC.x, sourceFloorRC.y, d);\n        float bottomLeft = getA(sourceCeilRC.x, sourceFloorRC.y, d);\n        float topRight = getA(sourceFloorRC.x, sourceCeilRC.y, d);\n        float bottomRight = getA(sourceCeilRC.x, sourceCeilRC.y, d);\n\n        vec2 fracRC = sourceFracIndexRC - vec2(sourceFloorRC);\n\n        float top = topLeft + (topRight - topLeft) * fracRC.y;\n        float bottom = bottomLeft + (bottomRight - bottomLeft) * fracRC.y;\n        float newValue = top + (bottom - top) * fracRC.x;\n\n        setOutput(newValue);\n      }\n    ";
+        var batch = inputShape[0], oldHeight = inputShape[1], oldWidth = inputShape[2], depth = inputShape[3];
+        this.outputShape = [batch, newHeight, newWidth, depth];
+        var effectiveInSize = alignCorners ? [oldHeight - 1, oldWidth - 1] : [oldHeight, oldWidth];
+        var effectiveOutSize = alignCorners ? [newHeight - 1, newWidth - 1] : [newHeight, newWidth];
+        this.userCode = "\n      const vec2 effectiveInputOverOutputRatioRC = vec2(\n          " + effectiveInSize[0] / effectiveOutSize[0] + ",\n          " + effectiveInSize[1] / effectiveOutSize[1] + ");\n      const vec2 inputShapeRC = vec2(" + oldHeight + ".0, " + oldWidth + ".0);\n\n      void main() {\n        ivec4 coords = getOutputCoords();\n        int b = coords[0];\n        int d = coords[3];\n        ivec2 yRC = coords.yz;\n\n        // Fractional source index.\n        vec2 sourceFracIndexRC = vec2(yRC) * effectiveInputOverOutputRatioRC;\n\n        // Compute the four integer indices.\n        ivec2 sourceFloorRC = ivec2(sourceFracIndexRC);\n        ivec2 sourceCeilRC = ivec2(\n          min(inputShapeRC - 1.0, ceil(sourceFracIndexRC)));\n\n        float topLeft = getA(b, sourceFloorRC.x, sourceFloorRC.y, d);\n        float bottomLeft = getA(b, sourceCeilRC.x, sourceFloorRC.y, d);\n        float topRight = getA(b, sourceFloorRC.x, sourceCeilRC.y, d);\n        float bottomRight = getA(b, sourceCeilRC.x, sourceCeilRC.y, d);\n\n        vec2 fracRC = sourceFracIndexRC - vec2(sourceFloorRC);\n\n        float top = topLeft + (topRight - topLeft) * fracRC.y;\n        float bottom = bottomLeft + (bottomRight - bottomLeft) * fracRC.y;\n        float newValue = top + (bottom - top) * fracRC.x;\n\n        setOutput(newValue);\n      }\n    ";
     }
-    return ResizeBilinear3DProgram;
+    return ResizeBilinearProgram;
 }());
-exports.ResizeBilinear3DProgram = ResizeBilinear3DProgram;
+exports.ResizeBilinearProgram = ResizeBilinearProgram;
 
-},{}],81:[function(require,module,exports){
+},{}],96:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var environment_1 = require("../../../environment");
-var util = require("../../../util");
-var broadcast_util = require("../../broadcast_util");
+var ReverseProgram = (function () {
+    function ReverseProgram(xShape, axis) {
+        this.variableNames = ['x'];
+        this.outputShape = xShape;
+        var getRevVar = function (i) {
+            if (axis.indexOf(i) !== -1 && xShape[i] !== 1) {
+                return xShape[i] + " - coords[" + i + "] - 1";
+            }
+            return "coords[" + i + "]";
+        };
+        var b = getRevVar(0);
+        var r = getRevVar(1);
+        var c = getRevVar(2);
+        var d = getRevVar(3);
+        this.userCode = "\n      void main() {\n        ivec4 coords = getOutputCoords();\n        float val = getX(" + b + ", " + r + ", " + c + ", " + d + ");\n        setOutput(val);\n      }\n    ";
+    }
+    return ReverseProgram;
+}());
+exports.ReverseProgram = ReverseProgram;
+
+},{}],97:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var environment_1 = require("../../environment");
+var util = require("../../util");
+var broadcast_util = require("../../ops/broadcast_util");
 var tex_util = require("./tex_util");
-var tex_util_1 = require("./tex_util");
 function makeShader(inputsInfo, outputShape, userCode, broadcast) {
     var sampleSnippet = getSampleSnippet();
     var setOutputSnippet = getSetOutputSnippet();
@@ -10123,7 +12465,7 @@ var UNSIGNED_BYTE_TEXTURE_SAMPLE_SNIPPET = "\n  uniform float NaN;\n\n  const ve
 var UNSIGNED_BYTE_TEXTURE_SETOUTPUT_SNIPPET = "\n  const vec4 floatPowers = vec4(\n    1.0,\n    255.0,\n    255.0 * 255.0,\n    255.0 * 255.0 * 255.0\n  );\n  const vec2 recipRange = vec2(1.0/range);\n  const vec2 recipRange255 = vec2(1.0/(maxValue - minValue));\n\n  void setOutput(float decodedValue) {\n    if (isNaN(decodedValue)) {\n      gl_FragColor = vec4(" + tex_util.BYTE_NAN_VALUE + ");\n      return;\n    }\n\n    float a = dot(vec2(decodedValue, -minValue), recipRange);\n    float b = fract(a) * 255.0;\n    float c = fract(b) * 255.0;\n    float d = fract(c) * 255.0;\n    gl_FragColor = floor(vec4(a, b, c, d)) / 255.0;\n\n    // TODO(dsmilkov): Version above gets better accuracy but probably slower\n    // than the version below. Benchmark to determine if the accuracy is worth\n    // the cost.\n\n    // float normValue = dot(vec2(decodedValue, -minValue), recipRange255);\n    // vec4 f = normValue * floatPowers;\n    // gl_FragColor = floor(fract(f) * 255.0) / 255.0;\n  }\n";
 var FLOAT_TEXTURE_SAMPLE_SNIPPET = "\n  float sample(sampler2D texture, vec2 uv) {\n    return texture2D(texture, uv).r;\n  }\n";
 var FLOAT_TEXTURE_SETOUTPUT_SNIPPET = "\n  void setOutput(float val) {\n    gl_FragColor = vec4(val, 0, 0, 0);\n  }\n";
-var SHADER_PREFIX = "\n  precision highp float;\n  precision highp int;\n  varying vec2 resultUV;\n  const vec2 halfCR = vec2(0.5, 0.5);\n\n  bool isNaN(float val) {\n    float v1 = val * val;\n    float v2 = val * val;\n    return v1 == v2 ? false : true;\n  }\n\n  bool hasNaN(vec4 values) {\n    vec4 v1 = values * values;\n    vec4 v2 = values * values;\n    return any(notEqual(v1, v2));\n  }\n\n  float getNaN(vec4 values) {\n    return dot(vec4(1), values);\n  }\n\n  int round(float value) {\n    return int(floor(value + 0.5));\n  }\n\n  int imod(int x, int y) {\n    return x - y * (x / y);\n  }\n\n  const vec2 randomConst = vec2(\n    23.14069263277926, // e^pi (Gelfond's constant)\n     2.665144142690225 // 2^sqrt(2) (Gelfond\u2013Schneider constant)\n  );\n\n  float random(float seed) {\n      return fract(cos(dot(resultUV * seed, randomConst)) * 12345.6789);\n  }\n\n  float sampleUVAndDepth(sampler2D texture, vec2 uv, int depth) {\n    float value;\n    if (depth == 0) {\n      value = texture2D(texture, uv).r;\n    } else if (depth == 1) {\n      value = texture2D(texture, uv).g;\n    } else if (depth == 2) {\n      value = texture2D(texture, uv).b;\n    } else if (depth == 3) {\n      value = texture2D(texture, uv).a;\n    }\n    return floor(value * 255.0 + 0.5);\n  }\n\n  " + SAMPLE_1D_SNIPPET + "\n  " + SAMPLE_2D_SNIPPET + "\n  " + SAMPLE_3D_SNIPPET + "\n  " + SAMPLE_4D_SNIPPET + "\n";
+var SHADER_PREFIX = "\n  precision highp float;\n  precision highp int;\n  varying vec2 resultUV;\n  const vec2 halfCR = vec2(0.5, 0.5);\n\n  bool isNaN(float val) {\n    float v1 = val * val;\n    float v2 = val * val;\n    return v1 == v2 ? false : true;\n  }\n\n  bool hasNaN(vec4 values) {\n    vec4 v1 = values * values;\n    vec4 v2 = values * values;\n    return any(notEqual(v1, v2));\n  }\n\n  float getNaN(vec4 values) {\n    return dot(vec4(1), values);\n  }\n\n  int round(float value) {\n    return int(floor(value + 0.5));\n  }\n\n  int imod(int x, int y) {\n    return x - y * (x / y);\n  }\n\n  const vec2 randomConst = vec2(\n    23.14069263277926, // e^pi (Gelfond's constant)\n     2.665144142690225 // 2^sqrt(2) (Gelfond\u2013Schneider constant)\n  );\n\n  float random(float seed) {\n      return fract(cos(dot(resultUV * seed, randomConst)) * 12345.6789);\n  }\n\n  " + SAMPLE_1D_SNIPPET + "\n  " + SAMPLE_2D_SNIPPET + "\n  " + SAMPLE_3D_SNIPPET + "\n  " + SAMPLE_4D_SNIPPET + "\n";
 function getOutputScalarCoords() {
     return "\n    int getOutputCoords() {\n      return 0;\n    }\n  ";
 }
@@ -10203,39 +12545,20 @@ function getSampler3D(inputInfo) {
     var texNumC = texShape[1];
     var stride0 = shape[1] * shape[2];
     var stride1 = shape[2];
-    var texType = inputInfo.shapeInfo.textureType;
-    if (texType === tex_util_1.TextureType.DEFAULT) {
-        var _a = util.squeezeShape(shape), newShape = _a.newShape, keptDims = _a.keptDims;
-        var squeezedShape = newShape;
-        if (squeezedShape.length < shape.length) {
-            var newInputInfo = squeezeInputInfo(inputInfo, squeezedShape);
-            var params = ['row', 'col', 'depth'];
-            return "\n        " + getSamplerFromInInfo(newInputInfo) + "\n        float " + funcName + "(int row, int col, int depth) {\n          return " + funcName + "(" + getSqueezedParams(params, keptDims) + ");\n        }\n      ";
-        }
+    var _a = util.squeezeShape(shape), newShape = _a.newShape, keptDims = _a.keptDims;
+    var squeezedShape = newShape;
+    if (squeezedShape.length < shape.length) {
+        var newInputInfo = squeezeInputInfo(inputInfo, squeezedShape);
+        var params = ['row', 'col', 'depth'];
+        return "\n        " + getSamplerFromInInfo(newInputInfo) + "\n        float " + funcName + "(int row, int col, int depth) {\n          return " + funcName + "(" + getSqueezedParams(params, keptDims) + ");\n        }\n      ";
     }
     if (texNumC === stride0) {
-        if (texType === tex_util_1.TextureType.DEFAULT) {
-            return "\n        float " + funcName + "(int row, int col, int depth) {\n          int texR = row;\n          int texC = col * " + stride1 + " + depth;\n          vec2 uv = (vec2(texC, texR) + halfCR) /\n                     vec2(" + texNumC + ".0, " + texNumR + ".0);\n          return sample(" + texName + ", uv);\n        }\n      ";
-        }
-        else if (texType === tex_util_1.TextureType.RGBA_COLOR) {
-            return "\n        float " + funcName + "(int row, int col, int depth) {\n          vec2 uv = (vec2(col, row) + halfCR) /\n                     vec2(" + texNumC + ".0, " + texNumR + ".0);\n          return sampleUVAndDepth(" + texName + ", uv, depth);\n        }\n      ";
-        }
-        else {
-            throw new Error("Unknown TextureType " + texType + ".");
-        }
+        return "\n        float " + funcName + "(int row, int col, int depth) {\n          int texR = row;\n          int texC = col * " + stride1 + " + depth;\n          vec2 uv = (vec2(texC, texR) + halfCR) /\n                     vec2(" + texNumC + ".0, " + texNumR + ".0);\n          return sample(" + texName + ", uv);\n        }\n      ";
     }
-    if (texNumC === stride1 && texType === tex_util_1.TextureType.DEFAULT) {
+    if (texNumC === stride1) {
         return "\n    float " + funcName + "(int row, int col, int depth) {\n      int texR = row * " + shape[1] + " + col;\n      int texC = depth;\n      vec2 uv = (vec2(texC, texR) + halfCR) / vec2(" + texNumC + ".0, " + texNumR + ".0);\n      return sample(" + texName + ", uv);\n    }\n  ";
     }
-    if (texType === tex_util_1.TextureType.DEFAULT) {
-        return "\n      float " + funcName + "(int row, int col, int depth) {\n        vec2 uv = UVfrom3D(\n            " + texNumR + ", " + texNumC + ", " + stride0 + ", " + stride1 + ", row, col, depth);\n        return sample(" + texName + ", uv);\n      }\n  ";
-    }
-    else if (texType === tex_util_1.TextureType.RGBA_COLOR) {
-        return "\n      float " + funcName + "(int row, int col, int depth) {\n        vec2 uv = UVfrom2D(" + texNumR + ", " + texNumC + ", " + shape[1] + ", row, col);\n        return sampleUVAndDepth(" + texName + ", uv, depth);\n      }\n    ";
-    }
-    else {
-        throw new Error("Unknown TextureType " + texType + ".");
-    }
+    return "\n      float " + funcName + "(int row, int col, int depth) {\n        vec2 uv = UVfrom3D(\n            " + texNumR + ", " + texNumC + ", " + stride0 + ", " + stride1 + ", row, col, depth);\n        return sample(" + texName + ", uv);\n      }\n  ";
 }
 function getSampler4D(inputInfo) {
     var shape = inputInfo.shapeInfo.logicalShape;
@@ -10318,7 +12641,6 @@ function getBroadcastOutputCoordsSampler(inputInfo, outShapeInfo, texFuncSnippet
 function getSamplerAtOutputCoords(inputInfo, outShapeInfo, supportsBroadcasting) {
     var inTexShape = inputInfo.shapeInfo.texShape;
     var texName = inputInfo.name;
-    var isRGBAColorTexture = inputInfo.shapeInfo.textureType === tex_util_1.TextureType.RGBA_COLOR;
     var texFuncSnippet = texName.charAt(0).toUpperCase() + texName.slice(1);
     var funcName = 'get' + texFuncSnippet + 'AtOutCoords';
     var broadcastDims = broadcast_util.getBroadcastDims(inputInfo.shapeInfo.logicalShape, outShapeInfo.logicalShape);
@@ -10330,27 +12652,18 @@ function getSamplerAtOutputCoords(inputInfo, outShapeInfo, supportsBroadcasting)
         return getBroadcastOutputCoordsSampler(inputInfo, outShapeInfo, texFuncSnippet, funcName);
     }
     var outTexShape = outShapeInfo.texShape;
-    if (util.arraysEqual(inTexShape, outTexShape) && !isRGBAColorTexture) {
+    if (util.arraysEqual(inTexShape, outTexShape)) {
         return "\n      float " + funcName + "() {\n        return sample(" + texName + ", resultUV);\n      }\n    ";
     }
-    var inTexExpandedShape = isRGBAColorTexture ?
-        [inTexShape[0], inTexShape[1] * inputInfo.shapeInfo.logicalShape[2]] :
-        inTexShape;
-    var sampleSnippet = "return sample(" + texName + ", uv);";
-    var rgbaColorSnippet = '';
-    if (isRGBAColorTexture) {
-        rgbaColorSnippet = "\n      int col = texC / " + inputInfo.shapeInfo.logicalShape[2] + ";\n      int texD = texC - col * " + inputInfo.shapeInfo.logicalShape[2] + ";\n      texC = col;\n    ";
-        sampleSnippet = "return sampleUVAndDepth(" + texName + ", uv, texD);";
-    }
-    var inSize = util.sizeFromShape(inTexExpandedShape);
+    var inSize = util.sizeFromShape(inTexShape);
     var broadcastSnippet = '';
     if (doBroadcast && broadcastOverOuter) {
         broadcastSnippet = "\n        int mainPart = index / " + inSize + ";\n        index -= mainPart * " + inSize + ";\n      ";
     }
-    return "\n    float " + funcName + "() {\n      ivec2 resTexRC = ivec2(resultUV.yx *\n                             vec2(" + outTexShape[0] + ", " + outTexShape[1] + "));\n      int index = resTexRC.x * " + outTexShape[1] + " + resTexRC.y;\n      " + broadcastSnippet + "\n      int texR = index / " + inTexExpandedShape[1] + ";\n      int texC = index - texR * " + inTexExpandedShape[1] + ";\n\n      " + rgbaColorSnippet + "\n\n      vec2 uv = (vec2(texC, texR) + halfCR) /\n                 vec2(" + inTexShape[1] + ".0, " + inTexShape[0] + ".0);\n\n      " + sampleSnippet + "\n    }\n  ";
+    return "\n    float " + funcName + "() {\n      ivec2 resTexRC = ivec2(resultUV.yx *\n                             vec2(" + outTexShape[0] + ", " + outTexShape[1] + "));\n      int index = resTexRC.x * " + outTexShape[1] + " + resTexRC.y;\n      " + broadcastSnippet + "\n      int texR = index / " + inTexShape[1] + ";\n      int texC = index - texR * " + inTexShape[1] + ";\n      vec2 uv = (vec2(texC, texR) + halfCR) /\n                 vec2(" + inTexShape[1] + ".0, " + inTexShape[0] + ".0);\n\n      return sample(" + texName + ", uv);\n    }\n  ";
 }
 function getCoordsDataType(rank) {
-    if (rank === 1) {
+    if (rank <= 1) {
         return 'int';
     }
     else if (rank === 2) {
@@ -10376,7 +12689,7 @@ function getSqueezedParams(params, keptDims) {
     return keptDims.map(function (d) { return params[d]; }).join(', ');
 }
 
-},{"../../../environment":15,"../../../util":100,"../../broadcast_util":89,"./tex_util":83}],82:[function(require,module,exports){
+},{"../../environment":34,"../../ops/broadcast_util":110,"../../util":151,"./tex_util":99}],98:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var shader_compiler_1 = require("./shader_compiler");
@@ -10440,13 +12753,13 @@ function getCoords(rank) {
     }
 }
 
-},{"./shader_compiler":81}],83:[function(require,module,exports){
+},{"./shader_compiler":97}],99:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var TextureType;
 (function (TextureType) {
-    TextureType[TextureType["DEFAULT"] = 0] = "DEFAULT";
-    TextureType[TextureType["RGBA_COLOR"] = 1] = "RGBA_COLOR";
+    TextureType[TextureType["FLOAT"] = 0] = "FLOAT";
+    TextureType[TextureType["UNSIGNED_BYTE"] = 1] = "UNSIGNED_BYTE";
 })(TextureType = exports.TextureType || (exports.TextureType = {}));
 function getUnpackedMatrixTextureShapeWidthHeight(rows, columns) {
     return [columns, rows];
@@ -10679,9 +12992,10 @@ function decodeMatrixFromPackedRGBA(packedRGBA, rows, columns, matrix) {
 }
 exports.decodeMatrixFromPackedRGBA = decodeMatrixFromPackedRGBA;
 
-},{}],84:[function(require,module,exports){
+},{}],100:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+var tex_util_1 = require("./tex_util");
 var TextureManager = (function () {
     function TextureManager(gpgpu) {
         this.gpgpu = gpgpu;
@@ -10692,8 +13006,9 @@ var TextureManager = (function () {
         this.allocatedTextures = [];
         this.usedTextureCount = {};
     }
-    TextureManager.prototype.acquireTexture = function (shapeRC) {
-        var shapeKey = getKeyFromTextureShape(shapeRC);
+    TextureManager.prototype.acquireTexture = function (shapeRC, texType) {
+        if (texType === void 0) { texType = tex_util_1.TextureType.FLOAT; }
+        var shapeKey = getKeyFromTextureShape(shapeRC, texType);
         if (!(shapeKey in this.freeTextures)) {
             this.freeTextures[shapeKey] = [];
         }
@@ -10713,8 +13028,9 @@ var TextureManager = (function () {
         this.allocatedTextures.push(newTexture);
         return newTexture;
     };
-    TextureManager.prototype.releaseTexture = function (texture, shape) {
-        var shapeKey = getKeyFromTextureShape(shape);
+    TextureManager.prototype.releaseTexture = function (texture, shape, texType) {
+        if (texType === void 0) { texType = tex_util_1.TextureType.FLOAT; }
+        var shapeKey = getKeyFromTextureShape(shape, texType);
         if (!(shapeKey in this.freeTextures)) {
             this.freeTextures[shapeKey] = [];
         }
@@ -10739,6 +13055,9 @@ var TextureManager = (function () {
     };
     TextureManager.prototype.dispose = function () {
         var _this = this;
+        if (this.allocatedTextures == null) {
+            return;
+        }
         this.allocatedTextures.forEach(function (texture) {
             _this.gpgpu.deleteMatrixTexture(texture);
         });
@@ -10751,11 +13070,11 @@ var TextureManager = (function () {
     return TextureManager;
 }());
 exports.TextureManager = TextureManager;
-function getKeyFromTextureShape(shapeRowsCol) {
-    return shapeRowsCol[0] + "_" + shapeRowsCol[1];
+function getKeyFromTextureShape(shapeRowsCol, texType) {
+    return shapeRowsCol[0] + "_" + shapeRowsCol[1] + "_" + texType;
 }
 
-},{}],85:[function(require,module,exports){
+},{"./tex_util":99}],101:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var shader_compiler_1 = require("./shader_compiler");
@@ -10791,7 +13110,7 @@ function getSourceCoords(aShape) {
     return sourceCoords.join();
 }
 
-},{"./shader_compiler":81}],86:[function(require,module,exports){
+},{"./shader_compiler":97}],102:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var shader_compiler_1 = require("./shader_compiler");
@@ -10824,9 +13143,10 @@ function getSwitchedCoords(newDim) {
     return switchedCoords.join();
 }
 
-},{"./shader_compiler":81}],87:[function(require,module,exports){
+},{"./shader_compiler":97}],103:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+var selu_util = require("../../ops/selu_util");
 var UnaryOpProgram = (function () {
     function UnaryOpProgram(aShape, opSnippet) {
         this.variableNames = ['A'];
@@ -10841,7 +13161,7 @@ exports.ABS = "\n  return abs(x);\n";
 exports.RELU = CHECK_NAN_SNIPPET + "\n  return (x < 0.0) ? 0.0 : x;\n";
 exports.ELU = "\n  return (x >= 0.0) ? x : (exp(x) - 1.0);\n";
 exports.ELU_DER = "\n  return (x >= 0.0) ? 1.0 : exp(x);\n";
-exports.SELU = "\n  // Stable and Attracting Fixed Point (0, 1) for Normalized Weights.\n  // see: https://arxiv.org/abs/1706.02515\n  float scaleAlpha = 1.7580993408473768599402175208123;\n  float scale = 1.0507009873554804934193349852946;\n  return (x >= 0.0) ? scale * x : scaleAlpha * (exp(x) - 1.0);\n";
+exports.SELU = "\n  // Stable and Attracting Fixed Point (0, 1) for Normalized Weights.\n  // see: https://arxiv.org/abs/1706.02515\n  float scaleAlpha = " + selu_util.SELU_SCALEALPHA + ";\n  float scale = " + selu_util.SELU_SCALE + ";\n  return (x >= 0.0) ? scale * x : scaleAlpha * (exp(x) - 1.0);\n";
 function LEAKY_RELU(alpha) {
     return "\n    return (x >= 0.0) ? x : " + alpha + " * x;\n  ";
 }
@@ -10868,13 +13188,15 @@ exports.SINH = "\n  float e2x = exp(x);\n  return (e2x - 1.0 / e2x) / 2.0;\n";
 exports.COSH = "\n  float e2x = exp(-x);\n  return (e2x + 1.0 / e2x) / 2.0;\n";
 exports.TANH = "\n  float e2x = exp(-2.0 * abs(x));\n  return sign(x) * (1.0 - e2x) / (1.0 + e2x);\n";
 exports.SQUARE = "\n  return x * x;\n";
+exports.LOGICAL_NOT = CHECK_NAN_SNIPPET + "\n  return float(!(x >= 1.0));\n";
+exports.TO_INT = "\n  return float(int(x));\n";
 
-},{}],88:[function(require,module,exports){
+},{"../../ops/selu_util":129}],104:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var MAX_TEXTURE_SIZE = null;
-var util = require("../../../util");
-var environment_1 = require("../../../environment");
+var util = require("../../util");
+var environment_1 = require("../../environment");
 function createWebGLRenderingContext(attributes) {
     var canvas = document.createElement('canvas');
     canvas.width = 1;
@@ -11098,6 +13420,10 @@ function getProgramUniformLocationOrThrow(gl, program, uniformName) {
     return throwIfNull(gl, function () { return gl.getUniformLocation(program, uniformName); }, 'uniform "' + uniformName + '" not present in program.');
 }
 exports.getProgramUniformLocationOrThrow = getProgramUniformLocationOrThrow;
+function getProgramUniformLocation(gl, program, uniformName) {
+    return gl.getUniformLocation(program, uniformName);
+}
+exports.getProgramUniformLocation = getProgramUniformLocation;
 function bindTextureToProgramUniformSampler(gl, program, texture, uniformSamplerLocation, textureUnit) {
     callAndCheck(gl, function () { return bindTextureUnit(gl, texture, textureUnit); });
     callAndCheck(gl, function () { return gl.uniform1i(uniformSamplerLocation, textureUnit); });
@@ -11184,7 +13510,1211 @@ function getTextureShapeFromLogicalShape(gl, logShape) {
 }
 exports.getTextureShapeFromLogicalShape = getTextureShapeFromLogicalShape;
 
-},{"../../../environment":15,"../../../util":100}],89:[function(require,module,exports){
+},{"../../environment":34,"../../util":151}],105:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var environment_1 = require("./environment");
+var array_ops = require("./ops/array_ops");
+var batchnorm = require("./ops/batchnorm");
+var binary_ops = require("./ops/binary_ops");
+var compare = require("./ops/compare");
+var conv = require("./ops/conv");
+var image_ops = require("./ops/image_ops");
+var logical = require("./ops/logical_ops");
+var lrn_ops = require("./ops/lrn");
+var lstm_ops = require("./ops/lstm");
+var matmul = require("./ops/matmul");
+var norm = require("./ops/norm");
+var ops = require("./ops/ops");
+var pool = require("./ops/pool");
+var reduction_ops = require("./ops/reduction_ops");
+var reverse = require("./ops/reverse");
+var slice = require("./ops/slice");
+var softmax_ops = require("./ops/softmax");
+var transpose = require("./ops/transpose");
+var unary_ops = require("./ops/unary_ops");
+var tracking_1 = require("./tracking");
+var util = require("./util");
+var tidy = tracking_1.Tracking.tidy;
+var keep = tracking_1.Tracking.keep;
+var NDArrayMath = (function () {
+    function NDArrayMath(backend, safeMode) {
+        this.matMul = matmul.Ops.matMul;
+        this.vectorTimesMatrix = matmul.Ops.vectorTimesMatrix;
+        this.outerProduct = matmul.Ops.outerProduct;
+        this.matrixTimesVector = matmul.Ops.matrixTimesVector;
+        this.dotProduct = matmul.Ops.dotProduct;
+        this.slice = slice.Ops.slice;
+        this.slice1D = slice.Ops.slice1d;
+        this.slice2D = slice.Ops.slice2d;
+        this.slice3D = slice.Ops.slice3d;
+        this.slice4D = slice.Ops.slice4d;
+        this.reverse = reverse.Ops.reverse;
+        this.reverse1D = reverse.Ops.reverse1d;
+        this.reverse2D = reverse.Ops.reverse2d;
+        this.reverse3D = reverse.Ops.reverse3d;
+        this.reverse4D = reverse.Ops.reverse4d;
+        this.batchNormalization = batchnorm.Ops.batchNormalization;
+        this.batchNormalization2D = batchnorm.Ops.batchNormalization2d;
+        this.batchNormalization3D = batchnorm.Ops.batchNormalization3d;
+        this.batchNormalization4D = batchnorm.Ops.batchNormalization4d;
+        this.avgPool = pool.Ops.avgPool;
+        this.maxPool = pool.Ops.maxPool;
+        this.minPool = pool.Ops.minPool;
+        this.maxPoolBackprop = pool.Ops.maxPoolBackprop;
+        this.conv2dTranspose = conv.Ops.conv2dTranspose;
+        this.depthwiseConv2D = conv.Ops.depthwiseConv2d;
+        this.conv2dDerFilter = conv.Ops.conv2dDerFilter;
+        this.conv2dDerInput = conv.Ops.conv2dDerInput;
+        this.argMax = reduction_ops.Ops.argMax;
+        this.argMin = reduction_ops.Ops.argMin;
+        this.logSumExp = reduction_ops.Ops.logSumExp;
+        this.max = reduction_ops.Ops.max;
+        this.mean = reduction_ops.Ops.mean;
+        this.min = reduction_ops.Ops.min;
+        this.moments = reduction_ops.Ops.moments;
+        this.sum = reduction_ops.Ops.sum;
+        this.add = binary_ops.Ops.add;
+        this.addStrict = binary_ops.Ops.addStrict;
+        this.div = binary_ops.Ops.div;
+        this.divide = this.div;
+        this.divStrict = binary_ops.Ops.divStrict;
+        this.divideStrict = this.divStrict;
+        this.maximum = binary_ops.Ops.maximum;
+        this.maximumStrict = binary_ops.Ops.maximumStrict;
+        this.minimum = binary_ops.Ops.minimum;
+        this.minimumStrict = binary_ops.Ops.minimumStrict;
+        this.mul = binary_ops.Ops.mul;
+        this.multiply = this.mul;
+        this.mulStrict = binary_ops.Ops.mulStrict;
+        this.multiplyStrict = this.mulStrict;
+        this.pow = binary_ops.Ops.pow;
+        this.powStrict = binary_ops.Ops.powStrict;
+        this.sub = binary_ops.Ops.sub;
+        this.subtract = this.sub;
+        this.subStrict = binary_ops.Ops.subStrict;
+        this.logicalNot = logical.Ops.logicalNot;
+        this.logicalAnd = logical.Ops.logicalAnd;
+        this.logicalOr = logical.Ops.logicalOr;
+        this.logicalXor = logical.Ops.logicalXor;
+        this.where = logical.Ops.where;
+        this.transpose = transpose.Ops.transpose;
+        this.equal = compare.Ops.equal;
+        this.equalStrict = compare.Ops.equalStrict;
+        this.greater = compare.Ops.greater;
+        this.greaterStrict = compare.Ops.greaterStrict;
+        this.greaterEqual = compare.Ops.greaterEqual;
+        this.greaterEqualStrict = compare.Ops.greaterEqualStrict;
+        this.less = compare.Ops.less;
+        this.lessStrict = compare.Ops.lessStrict;
+        this.lessEqual = compare.Ops.lessEqual;
+        this.lessEqualStrict = compare.Ops.lessEqualStrict;
+        this.notEqual = compare.Ops.notEqual;
+        this.notEqualStrict = compare.Ops.notEqualStrict;
+        this.abs = unary_ops.Ops.abs;
+        this.acos = unary_ops.Ops.acos;
+        this.asin = unary_ops.Ops.asin;
+        this.atan = unary_ops.Ops.atan;
+        this.ceil = unary_ops.Ops.ceil;
+        this.clip = unary_ops.Ops.clipByValue;
+        this.cos = unary_ops.Ops.cos;
+        this.cosh = unary_ops.Ops.cosh;
+        this.elu = unary_ops.Ops.elu;
+        this.exp = unary_ops.Ops.exp;
+        this.floor = unary_ops.Ops.floor;
+        this.leakyRelu = unary_ops.Ops.leakyRelu;
+        this.log = unary_ops.Ops.log;
+        this.neg = unary_ops.Ops.neg;
+        this.prelu = unary_ops.Ops.prelu;
+        this.relu = unary_ops.Ops.relu;
+        this.selu = unary_ops.Ops.selu;
+        this.sigmoid = unary_ops.Ops.sigmoid;
+        this.sin = unary_ops.Ops.sin;
+        this.sinh = unary_ops.Ops.sinh;
+        this.sqrt = unary_ops.Ops.sqrt;
+        this.square = unary_ops.Ops.square;
+        this.step = unary_ops.Ops.step;
+        this.tan = unary_ops.Ops.tan;
+        this.tanh = unary_ops.Ops.tanh;
+        this.norm = norm.Ops.norm;
+        this.basicLSTMCell = lstm_ops.Ops.basicLSTMCell;
+        this.multiRNNCell = lstm_ops.Ops.multiRNNCell;
+        this.softmax = softmax_ops.Ops.softmax;
+        this.softmaxCrossEntropy = softmax_ops.Ops.softmaxCrossEntropy;
+        this.cast = array_ops.Ops.cast;
+        this.clone = array_ops.Ops.clone;
+        this.gather = array_ops.Ops.gather;
+        this.reshape = array_ops.Ops.reshape;
+        this.tile = array_ops.Ops.tile;
+        this.oneHot = array_ops.Ops.oneHot;
+        this.multinomial = array_ops.Ops.multinomial;
+        this.pad1D = array_ops.Ops.pad1d;
+        this.pad2D = array_ops.Ops.pad2d;
+        this.resizeBilinear3D = image_ops.Ops.resizeBilinear;
+        this.localResponseNormalization3D = lrn_ops.LRN.localResponseNormalization;
+        this.localResponseNormalization4D = lrn_ops.LRN.localResponseNormalization;
+        this.keep = tracking_1.Tracking.keep;
+        environment_1.ENV.setMath(this, backend, safeMode);
+        this.engine = environment_1.ENV.engine;
+        this.dispose = environment_1.ENV.engine.dispose.bind(environment_1.ENV.engine);
+        this.registeredVariables = environment_1.ENV.engine.registeredVariables;
+        this.startScope = environment_1.ENV.engine.startScope.bind(environment_1.ENV.engine);
+        this.endScope = environment_1.ENV.engine.endScope.bind(environment_1.ENV.engine);
+    }
+    NDArrayMath.prototype.scope = function (scopeFn) {
+        var keepFn = function (tensor) { return keep(tensor); };
+        var trackFn = function (tensor) { return tensor; };
+        return tidy(function () { return scopeFn(keepFn, trackFn); });
+    };
+    NDArrayMath.prototype.track = function (result) {
+        return result;
+    };
+    NDArrayMath.prototype.topK = function (x, k) {
+        util.assert(k <= x.size, "Error in topK: k value (" + k + ") must be less than size of input " +
+            ("tensor, got shape " + x.shape + "."));
+        var values;
+        var indices;
+        tidy('topK', function () {
+            values = environment_1.ENV.engine.executeKernel('TopKValues', { inputs: { x: x }, args: { k: k } });
+            indices =
+                environment_1.ENV.engine.executeKernel('TopKIndices', { inputs: { x: x }, args: { k: k } });
+            return values;
+        });
+        var result = { values: values, indices: indices };
+        return result;
+    };
+    NDArrayMath.prototype.elementWiseMul = function (a, b) {
+        return a.mulStrict(b);
+    };
+    NDArrayMath.prototype.scalarDividedByArray = function (c, a) {
+        util.assert(c.size === 1, "Error in scalarDividedByArray: first argument must be rank 0, but " +
+            ("got Tensor of rank " + c.rank + "."));
+        return c.div(a);
+    };
+    NDArrayMath.prototype.arrayDividedByScalar = function (a, c) {
+        util.assert(c.size === 1, "Error in arrayDividedByScalar: second argument must be rank 0, " +
+            ("but got Tensor of rank " + c.rank + "."));
+        return a.div(c);
+    };
+    NDArrayMath.prototype.switchDim = function (x, perm) {
+        return ops.transpose(x, perm);
+    };
+    NDArrayMath.prototype.scalarPlusArray = function (c, a) {
+        util.assert(c.size === 1, "Error in scalarPlusArray: first argument must be rank 0, but got " +
+            ("rank " + c.rank + "."));
+        return this.add(c, a);
+    };
+    NDArrayMath.prototype.scalarMinusArray = function (c, a) {
+        util.assert(c.size === 1, "Error in scalarMinusArray: first argument must be rank 0, but got " +
+            ("rank " + c.rank + "."));
+        return this.subtract(c, a);
+    };
+    NDArrayMath.prototype.arrayMinusScalar = function (a, c) {
+        util.assert(c.size === 1, "Error in arrayMinusScalar: second argument must be rank 0, but " +
+            ("got rank " + c.rank + "."));
+        return this.subtract(a, c);
+    };
+    NDArrayMath.prototype.scaledArrayAdd = function (c1, a, c2, b) {
+        var _this = this;
+        util.assert(c1.size === 1, "Error in scaledArrayAdd: first argument must rank 0, but got " +
+            (" rank " + c1.rank + "."));
+        util.assert(c2.size === 1, "Error in scaledArrayAdd: third argument must be rank 0, but got " +
+            ("Tensor of rank " + c2.rank + "."));
+        util.assertShapesMatch(a.shape, b.shape, 'Error in scaledArrayAdd: ');
+        return tidy('scaledArrayAdd', function () {
+            return _this.add(_this.multiply(c1, a), _this.multiply(c2, b));
+        });
+    };
+    NDArrayMath.prototype.scalarTimesArray = function (c, a) {
+        util.assert(c.size === 1, "Error in arrayDividedByScalar: first argument must be rank 0, but " +
+            ("got rank " + c.rank + "."));
+        return this.multiply(c, a);
+    };
+    NDArrayMath.prototype.concat = function (a, b, axis) {
+        return ops.concat([a, b], axis);
+    };
+    NDArrayMath.prototype.concat1D = function (a, b) {
+        return ops.concat1d([a, b]);
+    };
+    NDArrayMath.prototype.concat2D = function (a, b, axis) {
+        return ops.concat2d([a, b], axis);
+    };
+    NDArrayMath.prototype.concat3D = function (a, b, axis) {
+        return ops.concat3d([a, b], axis);
+    };
+    NDArrayMath.prototype.concat4D = function (a, b, axis) {
+        return ops.concat4d([a, b], axis);
+    };
+    NDArrayMath.prototype.conv1d = function (input, filter, bias, stride, pad, dimRoundingMode) {
+        if (bias != null) {
+            util.assert(bias.rank === 1, "Error in conv1d: bias must be rank 1, but got rank " +
+                (bias.rank + "."));
+        }
+        var res = ops.conv1d(input, filter, stride, pad, dimRoundingMode);
+        return res.add(bias);
+    };
+    NDArrayMath.prototype.conv2d = function (x, filter, bias, strides, pad, dimRoundingMode) {
+        if (bias != null) {
+            util.assert(bias.rank === 1, "Error in conv2d: bias must be rank 1, but got rank " +
+                (bias.rank + "."));
+        }
+        var res = ops.conv2d(x, filter, strides, pad, dimRoundingMode);
+        return res.add(bias);
+    };
+    NDArrayMath.prototype.argMaxEquals = function (x1, x2) {
+        util.assertShapesMatch(x1.shape, x2.shape, 'Error in argMaxEquals: ');
+        return x1.argMax().equal(x2.argMax());
+    };
+    return NDArrayMath;
+}());
+exports.NDArrayMath = NDArrayMath;
+
+},{"./environment":34,"./ops/array_ops":106,"./ops/batchnorm":108,"./ops/binary_ops":109,"./ops/compare":111,"./ops/conv":114,"./ops/image_ops":116,"./ops/logical_ops":117,"./ops/lrn":118,"./ops/lstm":119,"./ops/matmul":120,"./ops/norm":121,"./ops/ops":123,"./ops/pool":124,"./ops/reduction_ops":127,"./ops/reverse":128,"./ops/slice":130,"./ops/softmax":132,"./ops/transpose":133,"./ops/unary_ops":134,"./tracking":148,"./util":151}],106:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var tensor_1 = require("../tensor");
+var util = require("../util");
+var concat_1 = require("./concat");
+var operation_1 = require("./operation");
+var rand_1 = require("./rand");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.tensor = function (values, shape, dtype) {
+        if (dtype === void 0) { dtype = 'float32'; }
+        var inferredShape = util.inferShape(values);
+        if (shape != null && inferredShape.length !== 1) {
+            util.assertShapesMatch(shape, inferredShape, "Error creating a new Tensor. " +
+                ("Inferred shape (" + inferredShape + ") does not match the ") +
+                ("provided shape (" + shape + "). "));
+        }
+        if (!util.isTypedArray(values) && !Array.isArray(values)) {
+            values = [values];
+        }
+        shape = shape || inferredShape;
+        return tensor_1.Tensor.make(shape, { values: toTypedArray(values, dtype) }, dtype);
+    };
+    Ops.scalar = function (value, dtype) {
+        if (dtype === void 0) { dtype = 'float32'; }
+        if (util.isTypedArray(value) || Array.isArray(value)) {
+            throw new Error('Error creating a new Scalar: value must be a primitive ' +
+                '(number|boolean)');
+        }
+        return Ops.tensor(value, [], dtype);
+    };
+    Ops.tensor1d = function (values, dtype) {
+        if (dtype === void 0) { dtype = 'float32'; }
+        var inferredShape = util.inferShape(values);
+        if (inferredShape.length !== 1) {
+            throw new Error('Error creating a new Tensor1D: values must be a flat/TypedArray');
+        }
+        return Ops.tensor(values, inferredShape, dtype);
+    };
+    Ops.tensor2d = function (values, shape, dtype) {
+        if (dtype === void 0) { dtype = 'float32'; }
+        var inferredShape = util.inferShape(values);
+        if (inferredShape.length !== 2 && inferredShape.length !== 1) {
+            throw new Error('Error creating a new Tensor2D: values must be number[][] ' +
+                'or flat/TypedArray');
+        }
+        shape = shape || inferredShape;
+        return Ops.tensor(values, shape, dtype);
+    };
+    Ops.tensor3d = function (values, shape, dtype) {
+        if (dtype === void 0) { dtype = 'float32'; }
+        var inferredShape = util.inferShape(values);
+        if (inferredShape.length !== 3 && inferredShape.length !== 1) {
+            throw new Error('Error creating a new Tensor3D: values must be number[][][]' +
+                'or flat/TypedArray');
+        }
+        shape = shape || inferredShape;
+        return Ops.tensor(values, shape, dtype);
+    };
+    Ops.tensor4d = function (values, shape, dtype) {
+        if (dtype === void 0) { dtype = 'float32'; }
+        var inferredShape = util.inferShape(values);
+        if (inferredShape.length !== 4 && inferredShape.length !== 1) {
+            throw new Error('Error creating a new Tensor4D: values must be number[][][][]' +
+                'or flat/TypedArray');
+        }
+        shape = shape || inferredShape;
+        return Ops.tensor(values, shape, dtype);
+    };
+    Ops.ones = function (shape, dtype) {
+        if (dtype === void 0) { dtype = 'float32'; }
+        var values = makeOnesTypedArray(util.sizeFromShape(shape), dtype);
+        return tensor_1.Tensor.make(shape, { values: values }, dtype);
+    };
+    Ops.zeros = function (shape, dtype) {
+        if (dtype === void 0) { dtype = 'float32'; }
+        var values = makeZerosTypedArray(util.sizeFromShape(shape), dtype);
+        return tensor_1.Tensor.make(shape, { values: values }, dtype);
+    };
+    Ops.fill = function (shape, value, dtype) {
+        if (dtype === void 0) { dtype = 'float32'; }
+        var values = util.getTypedArrayFromDType(dtype, util.sizeFromShape(shape));
+        values.fill(value);
+        return tensor_1.Tensor.make(shape, { values: values }, dtype);
+    };
+    Ops.onesLike = function (x) {
+        return Ops.ones(x.shape, x.dtype);
+    };
+    Ops.zerosLike = function (x) {
+        return Ops.zeros(x.shape, x.dtype);
+    };
+    Ops.clone = function (x) {
+        return tensor_1.Tensor.make(x.shape, { dataId: x.dataId }, x.dtype);
+    };
+    Ops.randomNormal = function (shape, mean, stdDev, dtype, seed) {
+        if (mean === void 0) { mean = 0; }
+        if (stdDev === void 0) { stdDev = 1; }
+        if (dtype != null && dtype === 'bool') {
+            throw new Error("Unsupported data type " + dtype);
+        }
+        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, false, seed);
+        return tensor_1.Tensor.rand(shape, function () { return randGauss.nextValue(); }, dtype);
+    };
+    Ops.truncatedNormal = function (shape, mean, stdDev, dtype, seed) {
+        if (mean === void 0) { mean = 0; }
+        if (stdDev === void 0) { stdDev = 1; }
+        if (dtype != null && dtype === 'bool') {
+            throw new Error("Unsupported data type " + dtype);
+        }
+        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, true, seed);
+        return tensor_1.Tensor.rand(shape, function () { return randGauss.nextValue(); }, dtype);
+    };
+    Ops.randomUniform = function (shape, minval, maxval, dtype) {
+        if (minval === void 0) { minval = 0; }
+        if (maxval === void 0) { maxval = 1; }
+        if (dtype === void 0) { dtype = 'float32'; }
+        return tensor_1.Tensor.rand(shape, function () { return util.randUniform(minval, maxval); }, dtype);
+    };
+    Ops.rand = function (shape, randFunction, dtype) {
+        var size = util.sizeFromShape(shape);
+        var values = null;
+        if (dtype == null || dtype === 'float32') {
+            values = new Float32Array(size);
+        }
+        else if (dtype === 'int32') {
+            values = new Int32Array(size);
+        }
+        else if (dtype === 'bool') {
+            values = new Uint8Array(size);
+        }
+        else {
+            throw new Error("Unknown data type " + dtype);
+        }
+        for (var i = 0; i < size; i++) {
+            values[i] = randFunction();
+        }
+        return tensor_1.Tensor.make(shape, { values: values }, dtype);
+    };
+    Ops.multinomial = function (probabilities, numSamples, seed) {
+        var numOutcomes = probabilities.size;
+        if (numOutcomes < 2) {
+            throw new Error("Error in multinomial: you need at least 2 outcomes, but got " +
+                (numOutcomes + "."));
+        }
+        if (probabilities.rank > 2) {
+            throw new Error("Rank of probabilities must be 1 or 2, but is " + probabilities.rank);
+        }
+        seed = seed || Math.random();
+        var origRank = probabilities.rank;
+        if (probabilities.rank === 1) {
+            probabilities = probabilities.as2D(1, -1);
+        }
+        var res = environment_1.ENV.engine.executeKernel('Multinomial', {
+            inputs: { probs: probabilities },
+            args: { numSamples: numSamples, seed: seed }
+        });
+        if (origRank === 1) {
+            return res.as1D();
+        }
+        return res;
+    };
+    Ops.oneHot = function (indices, depth, onValue, offValue) {
+        if (onValue === void 0) { onValue = 1; }
+        if (offValue === void 0) { offValue = 0; }
+        if (depth < 2) {
+            throw new Error("Error in oneHot: depth must be >=2, but it is " + depth);
+        }
+        return environment_1.ENV.engine.executeKernel('OneHot', { inputs: { indices: indices }, args: { depth: depth, onValue: onValue, offValue: offValue } });
+    };
+    Ops.fromPixels = function (pixels, numChannels) {
+        if (numChannels === void 0) { numChannels = 3; }
+        if (numChannels > 4) {
+            throw new Error('Cannot construct Tensor with more than 4 channels from pixels.');
+        }
+        return environment_1.ENV.engine.fromPixels(pixels, numChannels);
+    };
+    Ops.reshape = function (x, shape) {
+        shape = util.inferFromImplicitShape(shape, x.size);
+        util.assert(x.size === util.sizeFromShape(shape), 'new shape and old shape must have the same number of elements.');
+        var grad = function (dy, y) {
+            return { x: function () { return dy.reshape(x.shape); } };
+        };
+        return environment_1.ENV.engine.executeKernel('Reshape', { inputs: { x: x }, args: { newShape: shape } }, grad);
+    };
+    Ops.squeeze = function (x, axis) {
+        return Ops.reshape(x, util.squeezeShape(x.shape, axis).newShape);
+    };
+    Ops.cast = function (x, dtype) {
+        var grad = function (dy, y) {
+            return { x: function () { return dy.reshape(dy.shape); } };
+        };
+        return environment_1.ENV.engine.executeKernel('Cast', { inputs: { x: x }, args: { newDType: dtype } }, grad);
+    };
+    Ops.tile = function (x, reps) {
+        util.assert(x.rank === reps.length, "Error in transpose: rank of input " + x.rank + " " +
+            ("must match length of reps " + reps + "."));
+        return environment_1.ENV.engine.executeKernel('Tile', { inputs: { x: x }, args: { reps: reps } });
+    };
+    Ops.gather = function (x, indices, axis) {
+        if (axis === void 0) { axis = 0; }
+        return environment_1.ENV.engine.executeKernel('Gather', { inputs: { x: x, indices: indices }, args: { axis: axis } });
+    };
+    Ops.pad1d = function (x, paddings, constantValue) {
+        if (constantValue === void 0) { constantValue = 0; }
+        util.assert(paddings.length === 2, 'Invalid number of paddings. Must be length of 2.');
+        return environment_1.ENV.engine.executeKernel('Pad1D', { inputs: { x: x }, args: { paddings: paddings, constantValue: constantValue } });
+    };
+    Ops.pad2d = function (x, paddings, constantValue) {
+        if (constantValue === void 0) { constantValue = 0; }
+        util.assert(paddings.length === 2 && paddings[0].length === 2 &&
+            paddings[1].length === 2, 'Invalid number of paddings. Must be length of 2 each.');
+        return environment_1.ENV.engine.executeKernel('Pad2D', { inputs: { x: x }, args: { paddings: paddings, constantValue: constantValue } });
+    };
+    Ops.pad = function (x, paddings, constantValue) {
+        if (constantValue === void 0) { constantValue = 0; }
+        if (x.rank === 0) {
+            throw new Error('pad(scalar) is not defined. Pass non-scalar to pad');
+        }
+        else if (x.rank === 1) {
+            return Ops.pad1d(x, paddings[0], constantValue);
+        }
+        else if (x.rank === 2) {
+            return Ops.pad2d(x, paddings, constantValue);
+        }
+        else {
+            throw new Error("pad of rank-" + x.rank + " tensor is not yet supported");
+        }
+    };
+    Ops.stack = function (tensors, axis) {
+        if (axis === void 0) { axis = 0; }
+        util.assert(tensors.length >= 2, 'Pass at least two tensors to dl.stack');
+        var rank = tensors[0].rank;
+        var shape = tensors[0].shape;
+        var dtype = tensors[0].dtype;
+        util.assert(axis <= rank, 'Axis must be <= rank of the tensor');
+        tensors.forEach(function (t) {
+            util.assertShapesMatch(shape, t.shape, 'All tensors passed to stack must have matching shapes');
+        });
+        tensors.forEach(function (t) {
+            util.assert(dtype === t.dtype, 'All tensors passed to stack must have matching dtypes');
+        });
+        var expandedTensors = tensors.map(function (t) { return t.expandDims(axis); });
+        return concat_1.Concat.concat(expandedTensors, axis);
+    };
+    Ops.expandDims = function (x, axis) {
+        if (axis === void 0) { axis = 0; }
+        util.assert(axis <= x.rank, 'Axis must be <= rank of the tensor');
+        var newShape = x.shape.slice();
+        newShape.splice(axis, 0, 1);
+        return Ops.reshape(x, newShape);
+    };
+    Ops.linspace = function (start, stop, num) {
+        if (num === 0) {
+            throw new Error('Cannot request zero samples');
+        }
+        var step = (stop - start) / (num - 1);
+        var values = makeZerosTypedArray(num, 'float32');
+        values[0] = start;
+        for (var i = 1; i < values.length; i++) {
+            values[i] = values[i - 1] + step;
+        }
+        return tensor_1.Tensor1D.new(values, 'float32');
+    };
+    Ops.range = function (start, stop, step, dtype) {
+        if (step === void 0) { step = 1; }
+        if (dtype === void 0) { dtype = 'float32'; }
+        if (step === 0) {
+            throw new Error('Cannot have a step of zero');
+        }
+        var sameStartStop = start === stop;
+        var increasingRangeNegativeStep = start < stop && step < 0;
+        var decreasingRangePositiveStep = stop < start && step > 1;
+        if (sameStartStop || increasingRangeNegativeStep ||
+            decreasingRangePositiveStep) {
+            return Ops.zeros([0], dtype);
+        }
+        var numElements = Math.abs(Math.ceil((stop - start) / step));
+        var values = makeZerosTypedArray(numElements, dtype);
+        if (stop < start && step === 1) {
+            step = -1;
+        }
+        values[0] = start;
+        for (var i = 1; i < values.length; i++) {
+            values[i] = values[i - 1] + step;
+        }
+        return Ops.tensor1d(values, dtype);
+    };
+    Ops.buffer = function (shape, dtype, values) {
+        if (dtype === void 0) { dtype = 'float32'; }
+        return new tensor_1.TensorBuffer(shape, dtype, values);
+    };
+    Ops.print = function (x, verbose) {
+        if (verbose === void 0) { verbose = false; }
+        var C = (function () {
+            function Tensor() {
+            }
+            return Tensor;
+        }());
+        var displayTensor = new C();
+        displayTensor.shape = x.shape;
+        displayTensor.values = Array.from(x.dataSync());
+        displayTensor.toString = function () {
+            var fields = [
+                "values: [" + this.values.join(', ') + "]", "shape: [" + x.shape.join(', ') + "]",
+                "rank: " + x.rank
+            ];
+            if (verbose) {
+                fields.push("dtype: '" + this.dtype + "'");
+                fields.push("size: " + this.size);
+            }
+            for (var i = 0; i < fields.length; i++) {
+                fields[i] = '  ' + fields[i];
+            }
+            return 'TensorInfo {\n' + fields.join(',\n') + '\n}';
+        };
+        if (verbose) {
+            displayTensor.dtype = x.dtype;
+            displayTensor.size = x.size;
+        }
+        console.log(displayTensor);
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], Ops, "tensor", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], Ops, "scalar", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], Ops, "tensor1d", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], Ops, "tensor2d", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], Ops, "tensor3d", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], Ops, "tensor4d", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' }),
+        operation_1.operation
+    ], Ops, "ones", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' }),
+        operation_1.operation
+    ], Ops, "zeros", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' }),
+        operation_1.operation
+    ], Ops, "fill", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' }),
+        operation_1.operation
+    ], Ops, "onesLike", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' }),
+        operation_1.operation
+    ], Ops, "zerosLike", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' }),
+        operation_1.operation
+    ], Ops, "clone", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' }),
+        operation_1.operation
+    ], Ops, "randomNormal", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' }),
+        operation_1.operation
+    ], Ops, "truncatedNormal", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' }),
+        operation_1.operation
+    ], Ops, "randomUniform", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "rand", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "multinomial", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' }),
+        operation_1.operation
+    ], Ops, "oneHot", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' }),
+        operation_1.operation
+    ], Ops, "fromPixels", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Transformations' }),
+        operation_1.operation
+    ], Ops, "reshape", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Transformations' })
+    ], Ops, "squeeze", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Transformations' }),
+        operation_1.operation
+    ], Ops, "cast", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Slicing and Joining' }),
+        operation_1.operation
+    ], Ops, "tile", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Slicing and Joining' }),
+        operation_1.operation
+    ], Ops, "gather", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "pad1d", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "pad2d", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Transformations' }),
+        operation_1.operation
+    ], Ops, "pad", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Slicing and Joining' }),
+        operation_1.operation
+    ], Ops, "stack", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Transformations' }),
+        operation_1.operation
+    ], Ops, "expandDims", null);
+    __decorate([
+        operation_1.operation,
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], Ops, "linspace", null);
+    __decorate([
+        operation_1.operation,
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], Ops, "range", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], Ops, "buffer", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], Ops, "print", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+function makeZerosTypedArray(size, dtype) {
+    if (dtype == null || dtype === 'float32') {
+        return new Float32Array(size);
+    }
+    else if (dtype === 'int32') {
+        return new Int32Array(size);
+    }
+    else if (dtype === 'bool') {
+        return new Uint8Array(size);
+    }
+    else {
+        throw new Error("Unknown data type $ {dtype}");
+    }
+}
+function makeOnesTypedArray(size, dtype) {
+    var array = makeZerosTypedArray(size, dtype);
+    for (var i = 0; i < array.length; i++) {
+        array[i] = 1;
+    }
+    return array;
+}
+function toTypedArray(a, dtype) {
+    if (noConversionNeeded(a, dtype)) {
+        return a;
+    }
+    if (Array.isArray(a)) {
+        a = util.flatten(a);
+    }
+    return util.copyTypedArray(a, dtype);
+}
+function noConversionNeeded(a, dtype) {
+    return (a instanceof Float32Array && dtype === 'float32') ||
+        (a instanceof Int32Array && dtype === 'int32') ||
+        (a instanceof Uint8Array && dtype === 'bool');
+}
+
+},{"../doc":32,"../environment":34,"../tensor":146,"../util":151,"./concat":112,"./operation":122,"./rand":125}],107:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var util = require("../util");
+function axesAreInnerMostDims(axes, rank) {
+    for (var i = 0; i < axes.length; ++i) {
+        if (axes[axes.length - i - 1] !== rank - 1 - i) {
+            return false;
+        }
+    }
+    return true;
+}
+exports.axesAreInnerMostDims = axesAreInnerMostDims;
+function combineLocations(outputLoc, reduceLoc, axes) {
+    var rank = outputLoc.length + reduceLoc.length;
+    var loc = [];
+    var outIdx = 0;
+    var reduceIdx = 0;
+    for (var dim = 0; dim < rank; dim++) {
+        if (axes.indexOf(dim) === -1) {
+            loc.push(outputLoc[outIdx++]);
+        }
+        else {
+            loc.push(reduceLoc[reduceIdx++]);
+        }
+    }
+    return loc;
+}
+exports.combineLocations = combineLocations;
+function computeOutAndReduceShapes(aShape, axes) {
+    var outShape = [];
+    var rank = aShape.length;
+    for (var dim = 0; dim < rank; dim++) {
+        if (axes.indexOf(dim) === -1) {
+            outShape.push(aShape[dim]);
+        }
+    }
+    var reduceShape = axes.map(function (dim) { return aShape[dim]; });
+    return [outShape, reduceShape];
+}
+exports.computeOutAndReduceShapes = computeOutAndReduceShapes;
+function expandShapeToKeepDim(shape, axes) {
+    var reduceSubShape = axes.map(function (x) { return 1; });
+    return combineLocations(shape, reduceSubShape, axes);
+}
+exports.expandShapeToKeepDim = expandShapeToKeepDim;
+function parseAxisParam(axis, shape) {
+    var rank = shape.length;
+    axis = axis == null ? shape.map(function (s, i) { return i; }) : [].concat(axis);
+    util.assert(axis.every(function (ax) { return ax >= -rank && ax < rank; }), "All values in axis param must be in range [-" + rank + ", " + rank + ") but " +
+        ("got axis " + axis));
+    util.assert(axis.every(function (ax) { return util.isInt(ax); }), "All values in axis param must be integers but " +
+        ("got axis " + axis));
+    return axis.map(function (a) { return a < 0 ? rank + a : a; });
+}
+exports.parseAxisParam = parseAxisParam;
+function assertAxesAreInnerMostDims(msg, axes, rank) {
+    util.assert(axesAreInnerMostDims(axes, rank), msg + " supports only inner-most axes for now. " +
+        ("Got axes " + axes + " and rank-" + rank + " input."));
+}
+exports.assertAxesAreInnerMostDims = assertAxesAreInnerMostDims;
+function getAxesPermutation(axes, rank) {
+    if (axesAreInnerMostDims(axes, rank)) {
+        return null;
+    }
+    var result = [];
+    for (var i = 0; i < rank; ++i) {
+        if (axes.indexOf(i) === -1) {
+            result.push(i);
+        }
+    }
+    axes.forEach(function (axis) { return result.push(axis); });
+    return result;
+}
+exports.getAxesPermutation = getAxesPermutation;
+function getUndoAxesPermutation(axes) {
+    return axes.map(function (axis, i) { return [i, axis]; })
+        .sort(function (a, b) { return a[1] - b[1]; })
+        .map(function (x) { return x[0]; });
+}
+exports.getUndoAxesPermutation = getUndoAxesPermutation;
+function getInnerMostAxes(numAxes, rank) {
+    var res = [];
+    for (var i = rank - numAxes; i < rank; ++i) {
+        res.push(i);
+    }
+    return res;
+}
+exports.getInnerMostAxes = getInnerMostAxes;
+
+},{"../util":151}],108:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var util = require("../util");
+var operation_1 = require("./operation");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.batchNormalization2d = function (x, mean, variance, varianceEpsilon, scale, offset) {
+        if (varianceEpsilon === void 0) { varianceEpsilon = .001; }
+        util.assert(x.rank === 2, "Error in batchNormalization3D: x must be rank 3 but got rank " +
+            (x.rank + "."));
+        util.assert(mean.rank === 2 || mean.rank === 1, "Error in batchNormalization2D: mean must be rank 2 or rank 1 but " +
+            ("got rank " + mean.rank + "."));
+        util.assert(variance.rank === 2 || variance.rank === 1, "Error in batchNormalization2D: variance must be rank 2 or rank 1 " +
+            ("but got rank " + variance.rank + "."));
+        if (scale != null) {
+            util.assert(scale.rank === 2 || scale.rank === 1, "Error in batchNormalization2D: scale must be rank 2 or rank 1 " +
+                ("but got rank " + scale.rank + "."));
+        }
+        if (offset != null) {
+            util.assert(offset.rank === 2 || offset.rank === 1, "Error in batchNormalization2D: offset must be rank 2 or rank 1 " +
+                ("but got rank " + offset.rank + "."));
+        }
+        return Ops.batchNormalization(x, mean, variance, varianceEpsilon, scale, offset);
+    };
+    Ops.batchNormalization3d = function (x, mean, variance, varianceEpsilon, scale, offset) {
+        if (varianceEpsilon === void 0) { varianceEpsilon = .001; }
+        util.assert(x.rank === 3, "Error in batchNormalization3D: x must be rank 3 but got rank " +
+            (x.rank + "."));
+        util.assert(mean.rank === 3 || mean.rank === 1, "Error in batchNormalization3D: mean must be rank 3 or rank 1 but " +
+            ("got rank " + mean.rank + "."));
+        util.assert(variance.rank === 3 || variance.rank === 1, "Error in batchNormalization3D: variance must be rank 3 or rank 1 " +
+            ("but got rank " + variance.rank + "."));
+        if (scale != null) {
+            util.assert(scale.rank === 3 || scale.rank === 1, "Error in batchNormalization3D: scale must be rank 3 or rank 1 " +
+                ("but got rank " + scale.rank + "."));
+        }
+        if (offset != null) {
+            util.assert(offset.rank === 3 || offset.rank === 1, "Error in batchNormalization3D: offset must be rank 3 or rank 1 " +
+                ("but got rank " + offset.rank + "."));
+        }
+        return Ops.batchNormalization(x, mean, variance, varianceEpsilon, scale, offset);
+    };
+    Ops.batchNormalization4d = function (x, mean, variance, varianceEpsilon, scale, offset) {
+        if (varianceEpsilon === void 0) { varianceEpsilon = .001; }
+        util.assert(x.rank === 4, "Error in batchNormalization4D: x must be rank 4 but got rank " +
+            (x.rank + "."));
+        util.assert(mean.rank === 4 || mean.rank === 1, "Error in batchNormalization4D: mean must be rank 4 or rank 1 but " +
+            ("got rank " + mean.rank + "."));
+        util.assert(variance.rank === 4 || variance.rank === 1, "Error in batchNormalization4D: variance must be rank 4 or rank 1 " +
+            ("but got rank " + variance.rank + "."));
+        if (scale != null) {
+            util.assert(scale.rank === 4 || scale.rank === 1, "Error in batchNormalization4D: scale must be rank 4 or rank 1 " +
+                ("but got rank " + scale.rank + "."));
+        }
+        if (offset != null) {
+            util.assert(offset.rank === 4 || offset.rank === 1, "Error in batchNormalization4D: offset must be rank 4 or rank 1 " +
+                ("but got rank " + offset.rank + "."));
+        }
+        return Ops.batchNormalization(x, mean, variance, varianceEpsilon, scale, offset);
+    };
+    Ops.batchNormalization = function (x, mean, variance, varianceEpsilon, scale, offset) {
+        if (varianceEpsilon === void 0) { varianceEpsilon = .001; }
+        var x4D;
+        if (x.rank === 0 || x.rank === 1) {
+            x4D = x.as4D(1, 1, 1, x.size);
+        }
+        else if (x.rank === 2) {
+            x4D = x.as4D(1, 1, x.shape[0], x.shape[1]);
+        }
+        else if (x.rank === 3) {
+            x4D = x.as4D(1, x.shape[0], x.shape[1], x.shape[2]);
+        }
+        else {
+            x4D = x;
+        }
+        return environment_1.ENV.engine
+            .executeKernel('BatchNorm4D', {
+            inputs: {
+                x: x4D,
+                mean: batchnormReshape4D(mean),
+                variance: batchnormReshape4D(variance),
+                scale: batchnormReshape4D(scale),
+                offset: batchnormReshape4D(offset)
+            },
+            args: { varianceEpsilon: varianceEpsilon }
+        })
+            .reshape(x.shape);
+    };
+    __decorate([
+        operation_1.operation
+    ], Ops, "batchNormalization2d", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "batchNormalization3d", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "batchNormalization4d", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Normalization' })
+    ], Ops, "batchNormalization", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+function batchnormReshape4D(x) {
+    if (x == null) {
+        return null;
+    }
+    if (x.rank === 0) {
+        return x.as1D();
+    }
+    else if (x.rank === 1) {
+        return x;
+    }
+    else if (x.rank === 2) {
+        return x.as4D(1, 1, x.shape[0], x.shape[1]);
+    }
+    else if (x.rank === 3) {
+        return x.as4D(1, x.shape[0], x.shape[1], x.shape[2]);
+    }
+    return x;
+}
+
+},{"../doc":32,"../environment":34,"../util":151,"./operation":122}],109:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var util = require("../util");
+var broadcast_util = require("./broadcast_util");
+var operation_1 = require("./operation");
+var ops_1 = require("./ops");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.add = function (a, b) {
+        util.assertTypesMatch(a, b);
+        var outShape = broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        var der = function (dy, y) {
+            var derA = function () {
+                var res = dy;
+                var reduceAxes = broadcast_util.getReductionAxes(a.shape, outShape);
+                if (reduceAxes.length > 0) {
+                    res = res.sum(reduceAxes);
+                }
+                return res.reshape(a.shape);
+            };
+            var derB = function () {
+                var res = dy;
+                var reduceAxes = broadcast_util.getReductionAxes(b.shape, outShape);
+                if (reduceAxes.length > 0) {
+                    res = res.sum(reduceAxes);
+                }
+                return res.reshape(b.shape);
+            };
+            return { a: derA, b: derB };
+        };
+        return environment_1.ENV.engine.executeKernel('Add', { inputs: { a: a, b: b } }, der);
+    };
+    Ops.addStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in addStrict: ');
+        return a.add(b);
+    };
+    Ops.sub = function (a, b) {
+        util.assertTypesMatch(a, b);
+        var outShape = broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        var der = function (dy, y) {
+            var derA = function () {
+                var res = dy;
+                var reduceAxes = broadcast_util.getReductionAxes(a.shape, outShape);
+                if (reduceAxes.length > 0) {
+                    res = res.sum(reduceAxes);
+                }
+                return res.reshape(a.shape);
+            };
+            var derB = function () {
+                var res = dy;
+                var reduceAxes = broadcast_util.getReductionAxes(b.shape, outShape);
+                if (reduceAxes.length > 0) {
+                    res = res.sum(reduceAxes);
+                }
+                return res.neg().reshape(b.shape);
+            };
+            return { a: derA, b: derB };
+        };
+        return environment_1.ENV.engine.executeKernel('Sub', { inputs: { a: a, b: b } }, der);
+    };
+    Ops.subStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in subStrict: ');
+        return a.sub(b);
+    };
+    Ops.pow = function (base, exp) {
+        util.assert(exp.dtype === 'int32', 'only supports int32 data type for the exponent parameter.');
+        broadcast_util.assertAndGetBroadcastShape(base.shape, exp.shape);
+        var gradient = function (dy, y) {
+            if (!util.arraysEqual(base.shape, exp.shape) &&
+                !util.isScalarShape(exp.shape)) {
+                throw new Error("Gradient of pow not yet supported for broadcasted shapes.");
+            }
+            var derBase = function () {
+                var dx = exp.toFloat().mul(base.pow(exp.sub(ops_1.scalar(1, 'int32'))).toFloat());
+                return dy.mul(dx);
+            };
+            var derExp = function () {
+                throw new Error("Backprop through exponent not implemented yet.");
+            };
+            return { base: derBase, exp: derExp };
+        };
+        return environment_1.ENV.engine.executeKernel('Pow', { inputs: { base: base, exp: exp } }, gradient);
+    };
+    Ops.powStrict = function (base, exp) {
+        util.assertShapesMatch(base.shape, exp.shape, 'Error in powStrict: ');
+        return base.pow(exp);
+    };
+    Ops.mul = function (a, b) {
+        util.assertTypesMatch(a, b);
+        var outShape = broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        var der = function (dy, y) {
+            var derA = function () {
+                var res = dy.mul(b.toFloat());
+                var reduceAxes = broadcast_util.getReductionAxes(a.shape, outShape);
+                if (reduceAxes.length > 0) {
+                    return res.sum(reduceAxes).reshape(a.shape);
+                }
+                return res;
+            };
+            var derB = function () {
+                var res = dy.mul(a.toFloat());
+                var reduceAxes = broadcast_util.getReductionAxes(b.shape, outShape);
+                if (reduceAxes.length > 0) {
+                    return res.sum(reduceAxes).reshape(b.shape);
+                }
+                return res;
+            };
+            return { a: derA, b: derB };
+        };
+        return environment_1.ENV.engine.executeKernel('Mul', { inputs: { a: a, b: b } }, der);
+    };
+    Ops.mulStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in multiplyStrict: ');
+        return a.mul(b);
+    };
+    Ops.div = function (a, b) {
+        var outShape = broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        var der = function (dy, y) {
+            var derA = function () {
+                var res = dy.div(b.toFloat());
+                var reduceAxes = broadcast_util.getReductionAxes(a.shape, outShape);
+                if (reduceAxes.length > 0) {
+                    return res.sum(reduceAxes).reshape(a.shape);
+                }
+                return res;
+            };
+            var derB = function () {
+                var res = dy.mul(a.toFloat());
+                var reduceAxes = broadcast_util.getReductionAxes(b.shape, outShape);
+                if (reduceAxes.length > 0) {
+                    res = res.sum(reduceAxes).reshape(b.shape);
+                }
+                var tmp = b.square();
+                return res.div(tmp.toFloat()).neg();
+            };
+            return { a: derA, b: derB };
+        };
+        return environment_1.ENV.engine.executeKernel('Div', { inputs: { a: a, b: b } }, der);
+    };
+    Ops.divStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in divideStrict: ');
+        return a.div(b);
+    };
+    Ops.minimum = function (a, b) {
+        util.assertTypesMatch(a, b);
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        var der = function (dy, y) {
+            var derA = function () { return dy.mul(a.lessEqual(b).toFloat()); };
+            var derB = function () { return dy.mul(a.greater(b).toFloat()); };
+            return { a: derA, b: derB };
+        };
+        return environment_1.ENV.engine.executeKernel('Minimum', { inputs: { a: a, b: b } }, der);
+    };
+    Ops.minimumStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in minimumStrict: ');
+        return a.minimum(b);
+    };
+    Ops.maximum = function (a, b) {
+        util.assertTypesMatch(a, b);
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        var der = function (dy, y) {
+            var derA = function () { return dy.mul(a.greaterEqual(b).toFloat()); };
+            var derB = function () { return dy.mul(a.less(b).toFloat()); };
+            return { a: derA, b: derB };
+        };
+        return environment_1.ENV.engine.executeKernel('Maximum', { inputs: { a: a, b: b } }, der);
+    };
+    Ops.maximumStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in minimumStrict: ');
+        return a.maximum(b);
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Arithmetic' }),
+        operation_1.operation
+    ], Ops, "add", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "addStrict", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Arithmetic' }),
+        operation_1.operation
+    ], Ops, "sub", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "subStrict", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Arithmetic' }),
+        operation_1.operation
+    ], Ops, "pow", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "powStrict", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Arithmetic' }),
+        operation_1.operation
+    ], Ops, "mul", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "mulStrict", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Arithmetic' }),
+        operation_1.operation
+    ], Ops, "div", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "divStrict", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Arithmetic' }),
+        operation_1.operation
+    ], Ops, "minimum", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "minimumStrict", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Arithmetic' }),
+        operation_1.operation
+    ], Ops, "maximum", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "maximumStrict", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+
+},{"../doc":32,"../environment":34,"../util":151,"./broadcast_util":110,"./operation":122,"./ops":123}],110:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 function getBroadcastDims(inShape, outShape) {
@@ -11201,6 +14731,19 @@ function getBroadcastDims(inShape, outShape) {
     return dims;
 }
 exports.getBroadcastDims = getBroadcastDims;
+function getReductionAxes(inShape, outShape) {
+    var result = [];
+    for (var i = 0; i < outShape.length; i++) {
+        var inDim = inShape[inShape.length - i - 1];
+        var outAxis = outShape.length - i - 1;
+        var outDim = outShape[outAxis];
+        if (inDim == null || (inDim === 1 && outDim > 1)) {
+            result.unshift(outAxis);
+        }
+    }
+    return result;
+}
+exports.getReductionAxes = getReductionAxes;
 function broadcastDimsAreOuter(dims) {
     for (var i = 0; i < dims.length; i++) {
         if (dims[i] !== i) {
@@ -11227,7 +14770,182 @@ function assertAndGetBroadcastShape(shapeA, shapeB) {
 }
 exports.assertAndGetBroadcastShape = assertAndGetBroadcastShape;
 
-},{}],90:[function(require,module,exports){
+},{}],111:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var util = require("../util");
+var broadcast_util = require("./broadcast_util");
+var operation_1 = require("./operation");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.notEqual = function (a, b) {
+        util.assertTypesMatch(a, b);
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        return environment_1.ENV.engine.executeKernel('NotEqual', { inputs: { a: a, b: b } });
+    };
+    Ops.notEqualStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in notEqualStrict: ');
+        return a.notEqual(b);
+    };
+    Ops.less = function (a, b) {
+        util.assertTypesMatch(a, b);
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        return environment_1.ENV.engine.executeKernel('Less', { inputs: { a: a, b: b } });
+    };
+    Ops.lessStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in lessStrict: ');
+        return a.less(b);
+    };
+    Ops.equal = function (a, b) {
+        util.assertTypesMatch(a, b);
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        return environment_1.ENV.engine.executeKernel('Equal', { inputs: { a: a, b: b } });
+    };
+    Ops.equalStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in equalStrict: ');
+        return a.equal(b);
+    };
+    Ops.lessEqual = function (a, b) {
+        util.assertTypesMatch(a, b);
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        return environment_1.ENV.engine.executeKernel('LessEqual', { inputs: { a: a, b: b } });
+    };
+    Ops.lessEqualStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in lessEqualStrict: ');
+        return a.lessEqual(b);
+    };
+    Ops.greater = function (a, b) {
+        util.assertTypesMatch(a, b);
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        return environment_1.ENV.engine.executeKernel('Greater', { inputs: { a: a, b: b } });
+    };
+    Ops.greaterStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in greaterStrict: ');
+        return a.greater(b);
+    };
+    Ops.greaterEqual = function (a, b) {
+        util.assertTypesMatch(a, b);
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        return environment_1.ENV.engine.executeKernel('GreaterEqual', { inputs: { a: a, b: b } });
+    };
+    Ops.greaterEqualStrict = function (a, b) {
+        util.assertShapesMatch(a.shape, b.shape, 'Error in greaterEqualStrict: ');
+        return a.greaterEqual(b);
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Logical' }),
+        operation_1.operation
+    ], Ops, "notEqual", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "notEqualStrict", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Logical' }),
+        operation_1.operation
+    ], Ops, "less", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "lessStrict", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Logical' }),
+        operation_1.operation
+    ], Ops, "equal", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "equalStrict", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Logical' }),
+        operation_1.operation
+    ], Ops, "lessEqual", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "lessEqualStrict", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Logical' }),
+        operation_1.operation
+    ], Ops, "greater", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "greaterStrict", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Logical' }),
+        operation_1.operation
+    ], Ops, "greaterEqual", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "greaterEqualStrict", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+
+},{"../doc":32,"../environment":34,"../util":151,"./broadcast_util":110,"./operation":122}],112:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var util = require("../util");
+var concat_util = require("./concat_util");
+var operation_1 = require("./operation");
+var Concat = (function () {
+    function Concat() {
+    }
+    Concat.concat1d = function (tensors) {
+        return Concat.concat(tensors, 0);
+    };
+    Concat.concat2d = function (tensors, axis) {
+        return Concat.concat(tensors, axis);
+    };
+    Concat.concat3d = function (tensors, axis) {
+        return Concat.concat(tensors, axis);
+    };
+    Concat.concat4d = function (tensors, axis) {
+        return Concat.concat(tensors, axis);
+    };
+    Concat.concat = function (tensors, axis) {
+        if (axis === void 0) { axis = 0; }
+        util.assert(tensors.length >= 2, 'Pass at least two tensors to concat');
+        var result = tensors[0];
+        for (var i = 1; i < tensors.length; ++i) {
+            result = concat2Tensors(result, tensors[i], axis);
+        }
+        return result;
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Slicing and Joining' }),
+        operation_1.operation
+    ], Concat, "concat", null);
+    return Concat;
+}());
+exports.Concat = Concat;
+function concat2Tensors(a, b, axis) {
+    concat_util.assertParams(a.shape, b.shape, axis);
+    var outShape = concat_util.computeOutShape(a.shape, b.shape, axis);
+    var a2D = a.as2D(-1, util.sizeFromShape(a.shape.slice(axis)));
+    var b2D = b.as2D(-1, util.sizeFromShape(b.shape.slice(axis)));
+    var _a = concat_util.computeGradientSliceShapes(a2D.shape, b2D.shape), aBegin = _a.aBegin, aSize = _a.aSize, bBegin = _a.bBegin, bSize = _a.bSize;
+    var der = function (dy) {
+        return { a: function () { return dy.slice(aBegin, aSize); }, b: function () { return dy.slice(bBegin, bSize); } };
+    };
+    var res = environment_1.ENV.engine.executeKernel('Concat', { inputs: { a: a2D, b: b2D } }, der);
+    return res.reshape(outShape);
+}
+
+},{"../doc":32,"../environment":34,"../util":151,"./concat_util":113,"./operation":122}],113:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var util = require("../util");
@@ -11244,6 +14962,13 @@ function assertParams(aShape, bShape, axis) {
     }
 }
 exports.assertParams = assertParams;
+function computeOutShape1D(x1Shape, x2Shape) {
+    util.assert(x1Shape.length === 1 && x2Shape.length === 1, 'x1 and x2 should be 1d array.');
+    var outputShape = x1Shape.slice();
+    outputShape[0] += x2Shape[0];
+    return outputShape;
+}
+exports.computeOutShape1D = computeOutShape1D;
 function computeOutShape(x1Shape, x2Shape, axis) {
     util.assert(x1Shape.length === x2Shape.length, 'x1 and x2 should have the same rank.');
     var outputShape = x1Shape.slice();
@@ -11251,12 +14976,214 @@ function computeOutShape(x1Shape, x2Shape, axis) {
     return outputShape;
 }
 exports.computeOutShape = computeOutShape;
+function computeGradientSliceShapes(aShape, bShape) {
+    return {
+        aBegin: [0, 0],
+        aSize: aShape,
+        bBegin: [0, aShape[1]],
+        bSize: bShape
+    };
+}
+exports.computeGradientSliceShapes = computeGradientSliceShapes;
 
-},{"../util":100}],91:[function(require,module,exports){
+},{"../util":151}],114:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var util = require("../util");
+var conv_util = require("./conv_util");
+var operation_1 = require("./operation");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.conv1d = function (input, filter, stride, pad, dimRoundingMode) {
+        var input3D = input;
+        var reshapedTo3D = false;
+        if (input.rank === 2) {
+            reshapedTo3D = true;
+            input3D = input.as3D(1, input.shape[0], input.shape[1]);
+        }
+        util.assert(input3D.rank === 3, "Error in conv1d: input must be rank 3, but got rank " + input3D.rank + ".");
+        util.assert(filter.rank === 3, "Error in conv1d: filter must be rank 3, but got rank " +
+            (filter.rank + "."));
+        if (dimRoundingMode != null) {
+            util.assert(util.isInt(pad), "Error in conv1d: pad must be an integer when using, " +
+                ("dimRoundingMode " + dimRoundingMode + " but got pad " + pad + "."));
+        }
+        util.assert(input3D.shape[2] === filter.shape[1], "Error in conv1d: depth of input (" + input3D.shape[2] + ") must match  " +
+            ("input depth for filter " + filter.shape[1] + "."));
+        var filter4D = filter.as4D(1, filter.shape[0], filter.shape[1], filter.shape[2]);
+        var input4D = input3D.as4D(input3D.shape[0], 1, input3D.shape[1], input3D.shape[2]);
+        var strides = [1, stride];
+        var res = Ops.conv2d(input4D, filter4D, strides, pad, dimRoundingMode);
+        if (reshapedTo3D) {
+            return res.as2D(res.shape[2], res.shape[3]);
+        }
+        return res.as3D(res.shape[0], res.shape[2], res.shape[3]);
+    };
+    Ops.conv2d = function (x, filter, strides, pad, dimRoundingMode) {
+        var x4D = x;
+        var reshapedTo4D = false;
+        if (x.rank === 3) {
+            reshapedTo4D = true;
+            x4D = x.as4D(1, x.shape[0], x.shape[1], x.shape[2]);
+        }
+        util.assert(x4D.rank === 4, "Error in conv2d: input must be rank 4, but got rank " + x4D.rank + ".");
+        util.assert(filter.rank === 4, "Error in conv2d: filter must be rank 4, but got rank " +
+            (filter.rank + "."));
+        if (dimRoundingMode != null) {
+            util.assert(util.isInt(pad), "Error in conv2d: pad must be an integer when using, " +
+                ("dimRoundingMode " + dimRoundingMode + " but got pad " + pad + "."));
+        }
+        util.assert(x4D.shape[3] === filter.shape[2], "Error in conv2d: depth of input (" + x4D.shape[3] + ") must match  " +
+            ("input depth for filter " + filter.shape[2] + "."));
+        var convInfo = conv_util.computeConv2DInfo(x4D.shape, filter.shape, strides, pad, dimRoundingMode);
+        var gradients = function (dy, y) {
+            return {
+                x: function () { return Ops.conv2dDerInput(x4D.shape, dy, filter, strides, pad); },
+                filter: function () { return Ops.conv2dDerFilter(x4D, dy, filter.shape, strides, pad); }
+            };
+        };
+        var res = environment_1.ENV.engine.executeKernel('Conv2D', { inputs: { x: x4D, filter: filter }, args: { convInfo: convInfo } }, gradients);
+        if (reshapedTo4D) {
+            return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
+        }
+        return res;
+    };
+    Ops.conv2dDerInput = function (xShape, dy, filter, strides, pad, dimRoundingMode) {
+        util.assert(xShape.length === dy.rank, "Length of inShape " +
+            ("(" + xShape.length + ") and rank of dy (" + dy.rank + ") must match"));
+        var xShape4D = xShape;
+        var dy4D = dy;
+        var reshapedTo4D = false;
+        if (dy.rank === 3) {
+            reshapedTo4D = true;
+            dy4D = dy.as4D(1, dy.shape[0], dy.shape[1], dy.shape[2]);
+            xShape4D = [1, xShape[0], xShape[1], xShape[2]];
+        }
+        var inDepth = xShape4D[3];
+        var outDepth = dy4D.shape[3];
+        util.assert(xShape4D.length === 4, "Error in conv2dDerInput: inShape must be length 4, but got length " +
+            (xShape4D.length + "."));
+        util.assert(dy4D.rank === 4, "Error in conv2dDerInput: dy must be rank 4, but got " +
+            ("rank " + dy4D.rank));
+        util.assert(filter.rank === 4, "Error in conv2dDerInput: filter must be rank 4, but got " +
+            ("rank " + filter.rank));
+        util.assert(inDepth === filter.shape[2], "Error in conv2dDerInput: depth of input (" + inDepth + ") must " +
+            ("match input depth for filter " + filter.shape[2] + "."));
+        util.assert(outDepth === filter.shape[3], "Error in conv2dDerInput: depth of output (" + outDepth + ") must" +
+            ("match output depth for filter " + filter.shape[3] + "."));
+        if (dimRoundingMode != null) {
+            util.assert(util.isInt(pad), "Error in conv2dDerInput: pad must be an integer when using, " +
+                ("dimRoundingMode " + dimRoundingMode + " but got pad " + pad + "."));
+        }
+        var convInfo = conv_util.computeConv2DInfo(xShape4D, filter.shape, strides, pad, dimRoundingMode);
+        var res = environment_1.ENV.engine.executeKernel('Conv2DDerInput', { inputs: { dy: dy4D, filter: filter }, args: { convInfo: convInfo } });
+        if (reshapedTo4D) {
+            return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
+        }
+        return res;
+    };
+    Ops.conv2dDerFilter = function (x, dy, filterShape, strides, pad, dimRoundingMode) {
+        var x4D = x;
+        if (x.rank === 3) {
+            x4D = x.as4D(1, x.shape[0], x.shape[1], x.shape[2]);
+        }
+        var dy4D = dy;
+        if (dy4D.rank === 3) {
+            dy4D = dy.as4D(1, dy.shape[0], dy.shape[1], dy.shape[2]);
+        }
+        util.assert(x4D.rank === 4, "Error in conv2dDerFilter: input must be rank 4, but got shape " +
+            (x4D.shape + "."));
+        util.assert(dy4D.rank === 4, "Error in conv2dDerFilter: dy must be rank 4, but got shape " +
+            (dy4D.shape + "."));
+        util.assert(filterShape.length === 4, "Error in conv2dDerFilter: filterShape must be length 4, but got " +
+            (filterShape + "."));
+        util.assert(x4D.shape[3] === filterShape[2], "Error in conv2dDerFilter: depth of input " + x4D.shape[3] + ") must " +
+            ("match input depth in filter (" + filterShape[2] + "."));
+        util.assert(dy4D.shape[3] === filterShape[3], "Error in conv2dDerFilter: depth of dy (" + dy4D.shape[3] + ") must " +
+            ("match output depth for filter (" + filterShape[3] + ")."));
+        if (dimRoundingMode != null) {
+            util.assert(util.isInt(pad), "Error in conv2dDerFilter: pad must be an integer when using, " +
+                ("dimRoundingMode " + dimRoundingMode + " but got pad " + pad + "."));
+        }
+        var convInfo = conv_util.computeConv2DInfo(x4D.shape, filterShape, strides, pad, dimRoundingMode);
+        return environment_1.ENV.engine.executeKernel('Conv2DDerFilter', { inputs: { x: x4D, dy: dy4D }, args: { convInfo: convInfo } });
+    };
+    Ops.conv2dTranspose = function (x, filter, outputShape, strides, pad, dimRoundingMode) {
+        return Ops.conv2dDerInput(outputShape, x, filter, strides, pad, dimRoundingMode);
+    };
+    Ops.depthwiseConv2d = function (input, filter, strides, pad, rates, dimRoundingMode) {
+        if (rates === void 0) { rates = [1, 1]; }
+        var input4D = input;
+        var reshapedTo4D = false;
+        if (input.rank === 3) {
+            reshapedTo4D = true;
+            input4D = input.as4D(1, input.shape[0], input.shape[1], input.shape[2]);
+        }
+        util.assert(input4D.rank === 4, "Error in depthwiseConv2D: input must be rank 4, but got " +
+            ("rank " + input4D.rank + "."));
+        util.assert(filter.rank === 4, "Error in depthwiseConv2D: filter must be rank 4, but got rank " +
+            (filter.rank + "."));
+        util.assert(input4D.shape[3] === filter.shape[2], "Error in depthwiseConv2D: number of input channels " +
+            ("(" + input4D.shape[3] + ") must match the inChannels dimension in ") +
+            ("filter " + filter.shape[2] + "."));
+        rates = rates || [1, 1];
+        var _a = parseTupleParam(rates), rateHeight = _a[0], rateWidth = _a[1];
+        util.assert(rateHeight === 1 && rateWidth === 1, 'Error in depthwiseConv2D: rates greater than 1 are not yet ' +
+            ("supported. Got rates '" + rates + "'"));
+        if (dimRoundingMode != null) {
+            util.assert(util.isInt(pad), "Error in depthwiseConv2D: pad must be an integer when using, " +
+                ("dimRoundingMode " + dimRoundingMode + " but got pad " + pad + "."));
+        }
+        var convInfo = conv_util.computeConv2DInfo(input4D.shape, filter.shape, strides, pad, dimRoundingMode, true);
+        var res = environment_1.ENV.engine.executeKernel('DepthwiseConv2D', { inputs: { x: input4D, filter: filter }, args: { convInfo: convInfo } });
+        if (reshapedTo4D) {
+            return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
+        }
+        return res;
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Convolution' }),
+        operation_1.operation
+    ], Ops, "conv1d", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Convolution' }),
+        operation_1.operation
+    ], Ops, "conv2d", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "conv2dDerInput", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "conv2dDerFilter", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Convolution' }),
+        operation_1.operation
+    ], Ops, "conv2dTranspose", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Convolution' }),
+        operation_1.operation
+    ], Ops, "depthwiseConv2d", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+function parseTupleParam(param) {
+    return typeof param === 'number' ? [param, param] : param;
+}
+
+},{"../doc":32,"../environment":34,"../util":151,"./conv_util":115,"./operation":122}],115:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var util = require("../util");
-function computePool2DInfo(inShape, filterSize, strides, pad, dataFormat) {
+function computePool2DInfo(inShape, filterSize, strides, pad, roundingMode, dataFormat) {
     if (dataFormat === void 0) { dataFormat = 'channelsLast'; }
     var _a = parseTupleParam(filterSize), filterHeight = _a[0], filterWidth = _a[1];
     var filterShape;
@@ -11269,10 +15196,10 @@ function computePool2DInfo(inShape, filterSize, strides, pad, dataFormat) {
     else {
         throw new Error("Unknown dataFormat " + dataFormat);
     }
-    return computeConv2DInfo(inShape, filterShape, strides, pad, false, dataFormat);
+    return computeConv2DInfo(inShape, filterShape, strides, pad, roundingMode, false, dataFormat);
 }
 exports.computePool2DInfo = computePool2DInfo;
-function computeConv2DInfo(inShape, filterShape, strides, pad, depthwise, dataFormat) {
+function computeConv2DInfo(inShape, filterShape, strides, pad, roundingMode, depthwise, dataFormat) {
     if (depthwise === void 0) { depthwise = false; }
     if (dataFormat === void 0) { dataFormat = 'channelsLast'; }
     var _a = [-1, -1, -1, -1], batchSize = _a[0], inHeight = _a[1], inWidth = _a[2], inChannels = _a[3];
@@ -11287,7 +15214,7 @@ function computeConv2DInfo(inShape, filterShape, strides, pad, depthwise, dataFo
     }
     var filterHeight = filterShape[0], filterWidth = filterShape[1], filterChannels = filterShape[3];
     var _b = parseTupleParam(strides), strideHeight = _b[0], strideWidth = _b[1];
-    var _c = getPadAndOutInfo(pad, inHeight, inWidth, strideHeight, strideWidth, filterHeight, filterWidth), padInfo = _c.padInfo, outHeight = _c.outHeight, outWidth = _c.outWidth;
+    var _c = getPadAndOutInfo(pad, inHeight, inWidth, strideHeight, strideWidth, filterHeight, filterWidth, roundingMode), padInfo = _c.padInfo, outHeight = _c.outHeight, outWidth = _c.outWidth;
     var outChannels = depthwise ? filterChannels * inChannels : filterChannels;
     var outShape;
     if (dataFormat === 'channelsFirst') {
@@ -11316,16 +15243,16 @@ function computeConv2DInfo(inShape, filterShape, strides, pad, depthwise, dataFo
     };
 }
 exports.computeConv2DInfo = computeConv2DInfo;
-function computeOutputShape3D(inShape, fieldSize, outDepth, stride, zeroPad) {
+function computeOutputShape3D(inShape, fieldSize, outDepth, stride, zeroPad, roundingMode) {
     if (zeroPad == null) {
         zeroPad = computeDefaultPad(inShape, fieldSize, stride);
     }
     var inputRows = inShape[0];
     var inputCols = inShape[1];
-    var outputRows = (inputRows - fieldSize + 2 * zeroPad) / stride + 1;
+    var outputRows = conditionalRound((inputRows - fieldSize + 2 * zeroPad) / stride + 1, roundingMode);
     util.assert(util.isInt(outputRows), "The output # of rows (" + outputRows + ") must be an integer. Change the " +
         "stride and/or zero pad parameters");
-    var outputCols = (inputCols - fieldSize + 2 * zeroPad) / stride + 1;
+    var outputCols = conditionalRound((inputCols - fieldSize + 2 * zeroPad) / stride + 1, roundingMode);
     util.assert(util.isInt(outputCols), "The output # of columns (" + outputCols + ") must be an integer. Change " +
         "the stride and/or zero pad parameters");
     return [outputRows, outputCols, outDepth];
@@ -11348,13 +15275,13 @@ exports.computeDilatedRC = computeDilatedRC;
 function parseTupleParam(param) {
     return typeof param === 'number' ? [param, param] : param;
 }
-function getPadAndOutInfo(pad, inHeight, inWidth, strideHeight, strideWidth, filterHeight, filterWidth) {
+function getPadAndOutInfo(pad, inHeight, inWidth, strideHeight, strideWidth, filterHeight, filterWidth, roundingMode) {
     var padInfo;
     var outHeight;
     var outWidth;
     if (typeof pad === 'number') {
         padInfo = { top: pad, bottom: pad, left: pad, right: pad };
-        var outShape = computeOutputShape3D([inHeight, inWidth, 1], filterHeight, 1, strideHeight, pad);
+        var outShape = computeOutputShape3D([inHeight, inWidth, 1], filterHeight, 1, strideHeight, pad, roundingMode);
         outHeight = outShape[0];
         outWidth = outShape[1];
     }
@@ -11379,161 +15306,293 @@ function getPadAndOutInfo(pad, inHeight, inWidth, strideHeight, strideWidth, fil
     }
     return { padInfo: padInfo, outHeight: outHeight, outWidth: outWidth };
 }
-
-},{"../util":100}],92:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-var environment_1 = require("../environment");
-var ndarray_1 = require("./ndarray");
-var SquareCostFunc = (function () {
-    function SquareCostFunc() {
-        this.halfOne = environment_1.ENV.math.keep(ndarray_1.Scalar.new(0.5));
+function conditionalRound(value, roundingMode) {
+    if (!roundingMode) {
+        return value;
     }
-    SquareCostFunc.prototype.cost = function (math, x1, x2) {
-        var diff = math.subStrict(x1, x2);
-        var diffSquared = math.elementWiseMul(diff, diff);
-        var result = math.scalarTimesArray(this.halfOne, diffSquared);
-        diff.dispose();
-        diffSquared.dispose();
-        return result;
-    };
-    SquareCostFunc.prototype.der = function (math, x1, x2) {
-        return math.subStrict(x1, x2);
-    };
-    SquareCostFunc.prototype.dispose = function () {
-        this.halfOne.dispose();
-    };
-    return SquareCostFunc;
-}());
-exports.SquareCostFunc = SquareCostFunc;
+    switch (roundingMode) {
+        case 'round':
+            return Math.round(value);
+        case 'ceil':
+            return Math.ceil(value);
+        case 'floor':
+            return Math.floor(value);
+        default:
+            throw new Error("Unknown roundingMode " + roundingMode);
+    }
+}
 
-},{"../environment":15,"./ndarray":94}],93:[function(require,module,exports){
+},{"../util":151}],116:[function(require,module,exports){
 "use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
 var environment_1 = require("../environment");
 var util = require("../util");
-var axis_util = require("./axis_util");
-var backend_engine_1 = require("./backends/backend_engine");
-var matmul_1 = require("./backends/types/matmul");
+var operation_1 = require("./operation");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.resizeBilinear = function (images, size, alignCorners) {
+        if (alignCorners === void 0) { alignCorners = false; }
+        util.assert(images.rank === 3 || images.rank === 4, "Error in resizeBilinear: x must be rank 3 or 4, but got " +
+            ("rank " + images.rank + "."));
+        util.assert(size.length === 2, "Error in resizeBilinear: new shape must 2D, but got shape " +
+            (size + "."));
+        var batchImages = images;
+        var reshapedTo4D = false;
+        if (images.rank === 3) {
+            reshapedTo4D = true;
+            batchImages =
+                images.as4D(1, images.shape[0], images.shape[1], images.shape[2]);
+        }
+        var newHeight = size[0], newWidth = size[1];
+        var res = environment_1.ENV.engine.executeKernel('ResizeBilinear', { inputs: { x: batchImages }, args: { newHeight: newHeight, newWidth: newWidth, alignCorners: alignCorners } });
+        if (reshapedTo4D) {
+            return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
+        }
+        return res;
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Images', namespace: 'image' }),
+        operation_1.operation
+    ], Ops, "resizeBilinear", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+
+},{"../doc":32,"../environment":34,"../util":151,"./operation":122}],117:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var types = require("../types");
+var util = require("../util");
 var broadcast_util = require("./broadcast_util");
-var concat_util = require("./concat_util");
-var conv_util = require("./conv_util");
-var ndarray_1 = require("./ndarray");
-var slice_util = require("./slice_util");
-var NDArrayMath = (function () {
-    function NDArrayMath(backend, safeMode) {
-        this.registeredArrays = new Set();
-        this.customBackend = false;
-        this.registeredVariables = new Map();
-        if (typeof backend === 'string') {
-            this.backend = environment_1.ENV.getBackend(backend);
+var operation_1 = require("./operation");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.logicalNot = function (x) {
+        util.assert(x.dtype === 'bool', 'Error Array must be of type bool.');
+        return environment_1.ENV.engine.executeKernel('LogicalNot', { inputs: { x: x } });
+    };
+    Ops.logicalAnd = function (a, b) {
+        util.assert(a.dtype === 'bool' && b.dtype === 'bool', 'Error Array must be of type bool.');
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        return environment_1.ENV.engine.executeKernel('LogicalAnd', { inputs: { a: a, b: b } });
+    };
+    Ops.logicalOr = function (a, b) {
+        util.assert(a.dtype === 'bool' && b.dtype === 'bool', 'Error Array must be of type bool.');
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        return environment_1.ENV.engine.executeKernel('LogicalOr', { inputs: { a: a, b: b } });
+    };
+    Ops.logicalXor = function (a, b) {
+        util.assert(a.dtype === 'bool' && b.dtype === 'bool', 'Error Array must be of type bool.');
+        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
+        return environment_1.ENV.engine.executeKernel('LogicalXor', { inputs: { a: a, b: b } });
+    };
+    Ops.where = function (condition, a, b) {
+        util.assert(condition.dtype === 'bool' || a.dtype === 'bool' || b.dtype === 'bool', 'Error Array must be of type bool.');
+        util.assertShapesMatch(a.shape, b.shape, 'Error in where: ');
+        if (condition.rank === 1) {
+            util.assert(condition.shape[0] === a.shape[0], 'The first dimension of `a` must match the size of `condition`.');
         }
         else {
-            this.customBackend = true;
-            this.backend = backend;
+            util.assertShapesMatch(condition.shape, b.shape, 'Error in where: ');
         }
-        this.backendEngine = new backend_engine_1.BackendEngine(this.backend, safeMode);
+        var dtype = types.upcastType(a.dtype, b.dtype);
+        return environment_1.ENV.engine.executeKernel('Where', { inputs: { condition: condition, a: a, b: b }, args: { dtype: dtype } });
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Logical' }),
+        operation_1.operation
+    ], Ops, "logicalNot", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Logical' }),
+        operation_1.operation
+    ], Ops, "logicalAnd", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Logical' }),
+        operation_1.operation
+    ], Ops, "logicalOr", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Logical' }),
+        operation_1.operation
+    ], Ops, "logicalXor", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Logical' }),
+        operation_1.operation
+    ], Ops, "where", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+
+},{"../doc":32,"../environment":34,"../types":150,"../util":151,"./broadcast_util":110,"./operation":122}],118:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var util = require("../util");
+var operation_1 = require("./operation");
+var LRN = (function () {
+    function LRN() {
     }
-    NDArrayMath.prototype.time = function (query) {
-        return this.backend.time(query);
-    };
-    NDArrayMath.prototype.getNumArrays = function () {
-        return this.registeredArrays.size;
-    };
-    NDArrayMath.prototype.register = function (a) {
-        if (this.registeredArrays.has(a.id)) {
-            throw new Error("NDArray with id " + a.id + " was already registered");
+    LRN.localResponseNormalization = function (x, radius, bias, alpha, beta, normRegion) {
+        if (radius === void 0) { radius = 5; }
+        if (bias === void 0) { bias = 1; }
+        if (alpha === void 0) { alpha = 1; }
+        if (beta === void 0) { beta = 0.5; }
+        if (normRegion === void 0) { normRegion = 'acrossChannels'; }
+        util.assert(x.rank === 4 || x.rank === 3, "Error in localResponseNormalization: x must be rank 3 or 4 but got\n               rank " + x.rank + ".");
+        util.assert(util.isInt(radius), "Error in localResponseNormalization3D: radius must be an integer\n                     but got radius " + radius + ".");
+        var x4D = x;
+        var reshapedTo4D = false;
+        if (x.rank === 3) {
+            reshapedTo4D = true;
+            x4D = x.as4D(1, x.shape[0], x.shape[1], x.shape[2]);
         }
-        this.registeredArrays.add(a.id);
-        this.backendEngine.track(a);
-    };
-    NDArrayMath.prototype.registerVariable = function (v) {
-        if (this.registeredVariables.has(v.name)) {
-            throw new Error("Variable with name " + v.name + " was already registered");
+        var res = environment_1.ENV.engine.executeKernel('LRN4D', { inputs: { x: x4D }, args: { radius: radius, bias: bias, alpha: alpha, beta: beta, normRegion: normRegion } });
+        if (reshapedTo4D) {
+            return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
         }
-        this.registeredVariables.set(v.name, v);
-    };
-    NDArrayMath.prototype.writePixels = function (id, pixels, numChannels) {
-        this.backend.writePixels(id, pixels, numChannels);
-    };
-    NDArrayMath.prototype.write = function (id, values, dtype, shape) {
-        this.backend.write(id, values, dtype, shape);
-    };
-    NDArrayMath.prototype.readSync = function (id) {
-        return this.backend.readSync(id);
-    };
-    NDArrayMath.prototype.read = function (id) {
-        return this.backend.read(id);
-    };
-    NDArrayMath.prototype.enableDebugMode = function () {
-        this.backendEngine.enableDebugMode();
-        console.warn('Debugging mode is ON. The output of every math call will ' +
-            'be downloaded to CPU and checked for NaNs. ' +
-            'This significantly impacts performance.');
-    };
-    NDArrayMath.prototype.scope = function (scopeFn) {
-        var gradientsMode = false;
-        return this.backendEngine.scope('scope', scopeFn, gradientsMode);
-    };
-    NDArrayMath.prototype.gradientsScope = function (scopeFn) {
-        var gradientsMode = true;
-        return this.backendEngine.scope('gradientsScope', scopeFn, gradientsMode);
-    };
-    NDArrayMath.prototype.startScope = function () {
-        var gradientsMode = false;
-        this.backendEngine.startScope(gradientsMode);
-    };
-    NDArrayMath.prototype.endScope = function (result) {
-        var gradientsMode = false;
-        this.backendEngine.endScope(result, gradientsMode);
-    };
-    NDArrayMath.prototype.keep = function (result) {
-        return this.backendEngine.keep(result);
-    };
-    NDArrayMath.prototype.track = function (result) {
-        return result;
-    };
-    NDArrayMath.prototype.dispose = function () {
-        if (this.customBackend) {
-            this.backend.dispose();
+        else {
+            return res;
         }
     };
-    NDArrayMath.prototype.matMul = function (a, b, aOrientation, bOrientation) {
-        var _this = this;
-        if (aOrientation === void 0) { aOrientation = matmul_1.MatrixOrientation.REGULAR; }
-        if (bOrientation === void 0) { bOrientation = matmul_1.MatrixOrientation.REGULAR; }
-        var innerShapeA = (aOrientation === matmul_1.MatrixOrientation.REGULAR) ? a.shape[1] : a.shape[0];
-        var innerShapeB = (bOrientation === matmul_1.MatrixOrientation.REGULAR) ? b.shape[0] : b.shape[1];
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Normalization' }),
+        operation_1.operation
+    ], LRN, "localResponseNormalization", null);
+    return LRN;
+}());
+exports.LRN = LRN;
+
+},{"../doc":32,"../environment":34,"../util":151,"./operation":122}],119:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var operation_1 = require("./operation");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.multiRNNCell = function (lstmCells, data, c, h) {
+        var input = data;
+        var newStates = [];
+        for (var i = 0; i < lstmCells.length; i++) {
+            var output = lstmCells[i](input, c[i], h[i]);
+            newStates.push(output[0]);
+            newStates.push(output[1]);
+            input = output[1];
+        }
+        var newC = [];
+        var newH = [];
+        for (var i = 0; i < newStates.length; i += 2) {
+            newC.push(newStates[i]);
+            newH.push(newStates[i + 1]);
+        }
+        return [newC, newH];
+    };
+    Ops.basicLSTMCell = function (forgetBias, lstmKernel, lstmBias, data, c, h) {
+        var combined = data.concat(h, 1);
+        var weighted = combined.matMul(lstmKernel);
+        var res = weighted.add(lstmBias);
+        var batchSize = res.shape[0];
+        var sliceCols = res.shape[1] / 4;
+        var sliceSize = [batchSize, sliceCols];
+        var i = res.slice([0, 0], sliceSize);
+        var j = res.slice([0, sliceCols], sliceSize);
+        var f = res.slice([0, sliceCols * 2], sliceSize);
+        var o = res.slice([0, sliceCols * 3], sliceSize);
+        var newC = i.sigmoid().mulStrict(j.tanh()).addStrict(c.mulStrict(forgetBias.add(f).sigmoid()));
+        var newH = newC.tanh().mulStrict(o.sigmoid());
+        return [newC, newH];
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'RNN' }),
+        operation_1.operation
+    ], Ops, "multiRNNCell", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'RNN' }),
+        operation_1.operation
+    ], Ops, "basicLSTMCell", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+
+},{"../doc":32,"./operation":122}],120:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var matmul_1 = require("../kernels/types/matmul");
+var util = require("../util");
+var operation_1 = require("./operation");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.matMul = function (a, b, transposeA, transposeB) {
+        if (transposeA === void 0) { transposeA = false; }
+        if (transposeB === void 0) { transposeB = false; }
+        _a = [enumToBool(transposeA), enumToBool(transposeB)], transposeA = _a[0], transposeB = _a[1];
+        var innerShapeA = transposeA ? a.shape[0] : a.shape[1];
+        var innerShapeB = transposeB ? b.shape[1] : b.shape[0];
         util.assert(a.rank === 2 && b.rank === 2, "Error in matMul: inputs must be rank 2, got ranks " + a.rank +
             (" and " + b.rank + "."));
         util.assert(innerShapeA === innerShapeB, "Error in matMul: inner shapes (" + innerShapeA + ") and (" +
-            (innerShapeB + ") of NDArrays with shapes " + a.shape + " and ") +
-            (b.shape + " and orientations " + matmul_1.MatrixOrientation[aOrientation]) +
-            (" and " + matmul_1.MatrixOrientation[bOrientation] + " must match."));
-        return this.backendEngine.executeKernel('MatMul', { inputs: { a: a, b: b }, args: { aOrientation: aOrientation, bOrientation: bOrientation } }, function (dy, y) {
-            if (aOrientation === matmul_1.MatrixOrientation.TRANSPOSED ||
-                bOrientation === matmul_1.MatrixOrientation.TRANSPOSED) {
+            (innerShapeB + ") of Tensors with shapes " + a.shape + " and ") +
+            (b.shape + " and transposeA=" + transposeA) +
+            (" and transposeB=" + transposeB + " must match."));
+        return environment_1.ENV.engine.executeKernel('MatMul', { inputs: { a: a, b: b }, args: { transposeA: transposeA, transposeB: transposeB } }, function (dy, y) {
+            if (transposeA || transposeB) {
                 throw new Error("Backprop for transposed MatMul not yet implemented.");
             }
             return {
-                a: function () { return _this.matMul(dy, b, matmul_1.MatrixOrientation.REGULAR, matmul_1.MatrixOrientation.TRANSPOSED); },
-                b: function () { return _this.matMul(a, dy, matmul_1.MatrixOrientation.TRANSPOSED, matmul_1.MatrixOrientation.REGULAR); }
+                a: function () { return dy.matMul(b.toFloat(), false, true); },
+                b: function () { return a.toFloat().matMul(dy, true, false); }
             };
         });
+        var _a;
     };
-    NDArrayMath.prototype.executeOp = function (name, f) {
-        return f();
-    };
-    NDArrayMath.prototype.vectorTimesMatrix = function (v, matrix) {
+    Ops.vectorTimesMatrix = function (v, matrix) {
         util.assert(v.rank === 1, "Error in vectorTimesMatrix: first input must be rank 1, but got " +
             ("rank " + v.rank + "."));
         util.assert(matrix.rank === 2, "Error in vectorTimesMatrix: second input must be rank 2, but got " +
             ("rank " + matrix.rank + "."));
         util.assert(v.size === matrix.shape[0], "Error in vectorTimesMatrix: size of vector (" + v.size + ") " +
             ("must match first dimension of matrix (" + matrix.shape[0] + ")"));
-        return this.matMul(v.as2D(1, -1), matrix).as1D();
+        return v.as2D(1, -1).matMul(matrix).as1D();
     };
-    NDArrayMath.prototype.matrixTimesVector = function (matrix, v) {
+    Ops.matrixTimesVector = function (matrix, v) {
         util.assert(v.rank === 1, "Error in matrixTimesVector: second input must rank 1, but got " +
             ("rank " + v.rank + "."));
         util.assert(matrix.rank === 2, "Error in matrixTimesVector: first input must be a rank 2, but got " +
@@ -11541,656 +15600,348 @@ var NDArrayMath = (function () {
         util.assert(v.size === matrix.shape[1], "Error in matrixTimesVector: size of first rank 1 input " + v.size + " " +
             "must match inner dimension of second rank 2 input, but got " +
             ("shape " + matrix.shape + "."));
-        return this.matMul(matrix, v.as2D(-1, 1)).as1D();
+        return matrix.matMul(v.as2D(-1, 1)).as1D();
     };
-    NDArrayMath.prototype.dotProduct = function (v1, v2) {
+    Ops.dotProduct = function (v1, v2) {
         util.assert(v1.rank === 1 && v2.rank === 1, "Error in dotProduct: inputs must be rank 1, but got ranks " +
             (v1.rank + " and " + v2.rank + "."));
         util.assert(v1.size === v2.size, "Error in dotProduct: size of inputs (" + v1.size + ") and (" +
             (v2.size + ") must match."));
-        return this.matMul(v1.as2D(1, -1), v2.as2D(-1, 1)).asScalar();
+        return v1.as2D(1, -1).matMul(v2.as2D(-1, 1)).asScalar();
     };
-    NDArrayMath.prototype.outerProduct = function (v1, v2) {
+    Ops.outerProduct = function (v1, v2) {
         util.assert(v1.rank === 1 && v2.rank === 1, "Error in outerProduct: inputs must be rank 1, but got ranks " +
             (v1.rank + " and " + v2.rank + "."));
-        return this.matMul(v1.as2D(-1, 1), v2.as2D(1, -1));
+        return v1.as2D(-1, 1).matMul(v2.as2D(1, -1));
     };
-    NDArrayMath.prototype.clone = function (x) {
-        return this.backendEngine.executeKernel('Clone', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.reshape = function (ndarray, newShape) {
-        console.warn('math.reshape() is deprecated. Please call reshape() ' +
-            'directly on the ndarray object');
-        return ndarray.reshape(newShape);
-    };
-    NDArrayMath.prototype.slice1D = function (x, begin, size) {
-        slice_util.assertParamsValid(x, [begin], [size]);
-        return this.backendEngine.executeKernel('Slice1D', { inputs: { x: x }, args: { begin: begin, size: size } });
-    };
-    NDArrayMath.prototype.slice2D = function (x, begin, size) {
-        slice_util.assertParamsValid(x, begin, size);
-        return this.backendEngine.executeKernel('Slice2D', { inputs: { x: x }, args: { begin: begin, size: size } });
-    };
-    NDArrayMath.prototype.slice3D = function (x, begin, size) {
-        slice_util.assertParamsValid(x, begin, size);
-        return this.backendEngine.executeKernel('Slice3D', { inputs: { x: x }, args: { begin: begin, size: size } });
-    };
-    NDArrayMath.prototype.slice4D = function (x, begin, size) {
-        slice_util.assertParamsValid(x, begin, size);
-        return this.backendEngine.executeKernel('Slice4D', { inputs: { x: x }, args: { begin: begin, size: size } });
-    };
-    NDArrayMath.prototype.concat1D = function (a, b) {
-        concat_util.assertParams(a.shape, b.shape, 0);
-        return this.backendEngine.executeKernel('Concat1D', { inputs: { a: a, b: b } });
-    };
-    NDArrayMath.prototype.concat2D = function (a, b, axis) {
-        concat_util.assertParams(a.shape, b.shape, axis);
-        return this.backendEngine.executeKernel('Concat2D', { inputs: { a: a, b: b }, args: { axis: axis } });
-    };
-    NDArrayMath.prototype.concat3D = function (a, b, axis) {
-        concat_util.assertParams(a.shape, b.shape, axis);
-        return this.backendEngine.executeKernel('Concat3D', { inputs: { a: a, b: b }, args: { axis: axis } });
-    };
-    NDArrayMath.prototype.concat4D = function (a, b, axis) {
-        concat_util.assertParams(a.shape, b.shape, axis);
-        return this.backendEngine.executeKernel('Concat4D', { inputs: { a: a, b: b }, args: { axis: axis } });
-    };
-    NDArrayMath.prototype.logSumExp = function (input, axis, keepDims) {
-        var _this = this;
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Matrices' }),
+        operation_1.operation
+    ], Ops, "matMul", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "vectorTimesMatrix", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "matrixTimesVector", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "dotProduct", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Matrices' }),
+        operation_1.operation
+    ], Ops, "outerProduct", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+function enumToBool(transpose) {
+    if (transpose === matmul_1.MatrixOrientation.REGULAR) {
+        return false;
+    }
+    if (transpose === matmul_1.MatrixOrientation.TRANSPOSED) {
+        return true;
+    }
+    return transpose;
+}
+
+},{"../doc":32,"../environment":34,"../kernels/types/matmul":71,"../util":151,"./operation":122}],121:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var axis_util = require("./axis_util");
+var operation_1 = require("./operation");
+var ops = require("./ops");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.norm = function (x, ord, axis, keepDims) {
+        if (ord === void 0) { ord = 'euclidean'; }
         if (axis === void 0) { axis = null; }
         if (keepDims === void 0) { keepDims = false; }
-        var axes = axis_util.parseAxisParam(axis, input.shape);
-        return this.executeOp('logSumExp', function () {
-            var xMax = _this.max(input, axes, true);
-            var a = _this.subtract(input, xMax);
-            var b = _this.exp(a);
-            var c = _this.sum(b, axes);
-            var d = _this.log(c);
-            var res = _this.add(xMax.reshape(d.shape), d);
-            if (keepDims) {
-                var newShape = axis_util.expandShapeToKeepDim(res.shape, axes);
-                return res.reshape(newShape);
-            }
-            return res;
-        });
-    };
-    NDArrayMath.prototype.sum = function (x, axis, keepDims) {
-        var _this = this;
-        if (axis === void 0) { axis = null; }
-        if (keepDims === void 0) { keepDims = false; }
-        var origAxes = axis_util.parseAxisParam(axis, x.shape);
-        var axes = origAxes;
-        var permutedAxes = axis_util.getPermutedAxes(axes, x.rank);
-        return this.executeOp('sum', function () {
-            if (permutedAxes != null) {
-                x = _this.transpose(x, permutedAxes);
-                axes = axis_util.getInnerMostAxes(axes.length, x.rank);
-            }
-            var res = _this.backendEngine.executeKernel('Sum', { inputs: { x: x }, args: { axes: axes } }, function (dy, y) {
-                return {
-                    x: function () {
-                        if (axis != null) {
-                            throw new Error("Gradients for sum with axis reduction not yet " +
-                                "supported.");
-                        }
-                        return _this.multiply(dy, ndarray_1.NDArray.onesLike(x));
-                    }
-                };
-            });
-            if (keepDims) {
-                var newShape = axis_util.expandShapeToKeepDim(res.shape, origAxes);
-                return res.reshape(newShape);
-            }
-            return res;
-        });
-    };
-    NDArrayMath.prototype.mean = function (x, axis, keepDims) {
-        var _this = this;
-        if (axis === void 0) { axis = null; }
-        if (keepDims === void 0) { keepDims = false; }
-        var axes = axis_util.parseAxisParam(axis, x.shape);
-        var shapes = axis_util.computeOutAndReduceShapes(x.shape, axes);
-        var reduceShape = shapes[1];
-        var reduceSize = util.sizeFromShape(reduceShape);
-        return this.executeOp('mean', function () {
-            return _this.scope(function (keep) {
-                var res = _this.divide(x, ndarray_1.Scalar.new(reduceSize));
-                return _this.sum(res, axis, keepDims);
-            });
-        });
-    };
-    NDArrayMath.prototype.argMin = function (x, axis) {
-        var _this = this;
-        if (axis === void 0) { axis = null; }
-        var axes = axis_util.parseAxisParam(axis, x.shape);
-        var permutedAxes = axis_util.getPermutedAxes(axes, x.rank);
-        return this.executeOp('argMin', function () {
-            if (permutedAxes != null) {
-                x = _this.transpose(x, permutedAxes);
-                axes = axis_util.getInnerMostAxes(axes.length, x.rank);
-            }
-            return _this.backendEngine.executeKernel('ArgMin', { inputs: { x: x }, args: { axes: axes } });
-        });
-    };
-    NDArrayMath.prototype.argMax = function (x, axis) {
-        var _this = this;
-        if (axis === void 0) { axis = null; }
-        var axes = axis_util.parseAxisParam(axis, x.shape);
-        var permutedAxes = axis_util.getPermutedAxes(axes, x.rank);
-        return this.executeOp('argMax', function () {
-            if (permutedAxes != null) {
-                x = _this.transpose(x, permutedAxes);
-                axes = axis_util.getInnerMostAxes(axes.length, x.rank);
-            }
-            return _this.backendEngine.executeKernel('ArgMax', { inputs: { x: x }, args: { axes: axes } });
-        });
-    };
-    NDArrayMath.prototype.argMaxEquals = function (x1, x2) {
-        var _this = this;
-        util.assertShapesMatch(x1.shape, x2.shape, 'Error in argMaxEquals: ');
-        return this.executeOp('argMaxEquals', function () { return _this.scope(function () {
-            return _this.equal(_this.argMax(x1), _this.argMax(x2));
-        }); });
-    };
-    NDArrayMath.prototype.equal = function (a, b) {
-        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
-        return this.backendEngine.executeKernel('Equal', { inputs: { a: a, b: b } });
-    };
-    NDArrayMath.prototype.equalStrict = function (a, b) {
-        util.assertShapesMatch(a.shape, b.shape, 'Error in equalStrict: ');
-        return this.equal(a, b);
-    };
-    NDArrayMath.prototype.topK = function (x, k) {
-        var _this = this;
-        util.assert(k <= x.size, "Error in topK: k value (" + k + ") must be less than size of input " +
-            ("ndarray, got shape " + x.shape + "."));
-        var values;
-        var indices;
-        this.executeOp('topK', function () {
-            values = _this.backendEngine.executeKernel('TopKValues', { inputs: { x: x }, args: { k: k } });
-            indices = _this.backendEngine.executeKernel('TopKIndices', { inputs: { x: x }, args: { k: k } });
-            return values;
-        });
-        var result = { values: values, indices: indices };
-        return result;
-    };
-    NDArrayMath.prototype.min = function (x, axis, keepDims) {
-        var _this = this;
-        if (axis === void 0) { axis = null; }
-        if (keepDims === void 0) { keepDims = false; }
-        var origAxes = axis_util.parseAxisParam(axis, x.shape);
-        var axes = origAxes;
-        var permutedAxes = axis_util.getPermutedAxes(axes, x.rank);
-        return this.executeOp('min', function () {
-            if (permutedAxes != null) {
-                x = _this.transpose(x, permutedAxes);
-                axes = axis_util.getInnerMostAxes(axes.length, x.rank);
-            }
-            var res = _this.backendEngine.executeKernel('Min', { inputs: { x: x }, args: { axes: axes } });
-            if (keepDims) {
-                var newShape = axis_util.expandShapeToKeepDim(res.shape, origAxes);
-                return res.reshape(newShape);
-            }
-            return res;
-        });
-    };
-    NDArrayMath.prototype.minimum = function (a, b) {
-        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
-        util.assert(a.dtype === b.dtype, "The dtypes of the first (" + a.dtype + ") and " +
-            ("second (" + b.dtype + ") input must match"));
-        return this.backendEngine.executeKernel('Minimum', { inputs: { a: a, b: b } });
-    };
-    NDArrayMath.prototype.max = function (x, axis, keepDims) {
-        var _this = this;
-        if (axis === void 0) { axis = null; }
-        if (keepDims === void 0) { keepDims = false; }
-        var origAxes = axis_util.parseAxisParam(axis, x.shape);
-        var axes = origAxes;
-        var permutedAxes = axis_util.getPermutedAxes(axes, x.rank);
-        return this.executeOp('max', function () {
-            if (permutedAxes != null) {
-                x = _this.transpose(x, permutedAxes);
-                axes = axis_util.getInnerMostAxes(axes.length, x.rank);
-            }
-            var res = _this.backendEngine.executeKernel('Max', { inputs: { x: x }, args: { axes: axes } });
-            if (keepDims) {
-                var newShape = axis_util.expandShapeToKeepDim(res.shape, origAxes);
-                return res.reshape(newShape);
-            }
-            return res;
-        });
-    };
-    NDArrayMath.prototype.maximum = function (a, b) {
-        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
-        util.assert(a.dtype === b.dtype, "The dtypes of the first (" + a.dtype + ") and " +
-            ("second (" + b.dtype + ") input must match"));
-        return this.backendEngine.executeKernel('Maximum', { inputs: { a: a, b: b } });
-    };
-    NDArrayMath.prototype.softmax = function (logits, dim) {
-        var _this = this;
-        if (dim === void 0) { dim = -1; }
-        if (dim === -1) {
-            dim = logits.rank - 1;
+        var norm = normImpl(x, ord, axis);
+        var keepDimsShape = norm.shape;
+        if (keepDims) {
+            var axes = axis_util.parseAxisParam(axis, x.shape);
+            keepDimsShape = axis_util.expandShapeToKeepDim(norm.shape, axes);
         }
-        if (dim !== logits.rank - 1) {
-            throw Error('Softmax along a non-last dimension is not yet supported. ' +
-                ("Logits was rank " + logits.rank + " and dim was " + dim));
+        return norm.reshape(keepDimsShape);
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Matrices' }),
+        operation_1.operation
+    ], Ops, "norm", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+function normImpl(x, p, axis) {
+    if (axis === void 0) { axis = null; }
+    if (x.rank === 0) {
+        return x.abs();
+    }
+    if (x.rank !== 1 && axis === null) {
+        return normImpl(x.reshape([-1]), p, axis);
+    }
+    if (x.rank === 1 || typeof axis === 'number' ||
+        axis instanceof Array && axis.length === 1) {
+        if (p === 1) {
+            return x.abs().sum(axis);
         }
-        return this.executeOp('softmax', function () {
-            return _this.scope(function () {
-                var lse = _this.logSumExp(logits, [dim], true);
-                var logResult = _this.subtract(logits, lse);
-                return _this.exp(logResult);
-            });
-        });
-    };
-    NDArrayMath.prototype.switchDim = function (a, newDim) {
-        return this.transpose(a, newDim);
-    };
-    NDArrayMath.prototype.tile = function (x, reps) {
-        util.assert(x.rank === reps.length, "Error in transpose: rank of input " + x.rank + " " +
-            ("must match length of reps " + reps + "."));
-        return this.backendEngine.executeKernel('Tile', { inputs: { x: x }, args: { reps: reps } });
-    };
-    NDArrayMath.prototype.transpose = function (x, perm) {
-        if (perm == null) {
-            perm = x.shape.map(function (s, i) { return i; }).reverse();
+        if (p === Infinity) {
+            return x.abs().max(axis);
         }
-        util.assert(x.rank === perm.length, "Error in transpose: rank of input " + x.rank + " " +
-            ("must match length of perm " + perm + "."));
-        return this.backendEngine.executeKernel('Transpose', { inputs: { x: x }, args: { perm: perm } });
+        if (p === -Infinity) {
+            return x.abs().min(axis);
+        }
+        if (p === 'euclidean' || p === 2) {
+            return x.abs().pow(ops.scalar(2, 'int32')).sum(axis).sqrt();
+        }
+        throw new Error("Error in norm: invalid ord value: " + p);
+    }
+    if (axis instanceof Array && axis.length === 2) {
+        if (p === 1) {
+            return x.abs().sum(axis[0]).max(axis[1] - 1);
+        }
+        if (p === Infinity) {
+            return x.abs().sum(axis[1]).max(axis[0]);
+        }
+        if (p === -Infinity) {
+            return x.abs().sum(axis[1]).min(axis[0]);
+        }
+        if (p === 'fro' || p === 'euclidean') {
+            return x.square().sum(axis).sqrt();
+        }
+        throw new Error("Error in norm: invalid ord value: " + p);
+    }
+    throw new Error("Error in norm: invalid axis: " + axis);
+}
+
+},{"../doc":32,"./axis_util":107,"./operation":122,"./ops":123}],122:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var globals_1 = require("../globals");
+function operation(target, name, descriptor) {
+    var fn = descriptor.value;
+    descriptor.value = function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        return globals_1.tidy(name, function () { return fn.apply(void 0, args); });
     };
-    NDArrayMath.prototype.scalarPlusArray = function (c, a) {
-        util.assert(c.size === 1, "Error in scalarPlusArray: first argument must be rank 0, but got " +
-            ("rank " + c.rank + "."));
-        return this.add(c, a);
-    };
-    NDArrayMath.prototype.scalarMinusArray = function (c, a) {
-        util.assert(c.size === 1, "Error in scalarMinusArray: first argument must be rank 0, but got " +
-            ("rank " + c.rank + "."));
-        return this.subtract(c, a);
-    };
-    NDArrayMath.prototype.arrayMinusScalar = function (a, c) {
-        util.assert(c.size === 1, "Error in arrayMinusScalar: second argument must be rank 0, but " +
-            ("got rank " + c.rank + "."));
-        return this.subtract(a, c);
-    };
-    NDArrayMath.prototype.neg = function (x) {
-        return this.backendEngine.executeKernel('Neg', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.add = function (a, b) {
-        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
-        return this.backendEngine.executeKernel('Add', { inputs: { a: a, b: b } });
-    };
-    NDArrayMath.prototype.addStrict = function (a, b) {
-        util.assertShapesMatch(a.shape, b.shape, 'Error in addStrict: ');
-        return this.add(a, b);
-    };
-    NDArrayMath.prototype.subtract = function (a, b) {
-        var _this = this;
-        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
-        return this.backendEngine.executeKernel('Sub', { inputs: { a: a, b: b } }, function (dy, y) {
-            if (!util.arraysEqual(a.shape, b.shape)) {
-                throw new Error("Backprop through broadcasted subtract not " +
-                    "yet supported.");
-            }
-            return {
-                a: function () { return ndarray_1.NDArray.onesLike(a); },
-                b: function () { return _this.scope(function () { return _this.neg(ndarray_1.NDArray.onesLike(b)); }); }
-            };
-        });
-    };
-    NDArrayMath.prototype.pow = function (a, b) {
-        var _this = this;
-        util.assert(b.dtype === 'int32', 'only supports int32 data type for the exponent parameter.');
-        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
-        var gradient = function (dy, y) {
-            if (!util.arraysEqual(a.shape, b.shape)) {
-                throw new Error("Gradient of pow not yet supported for broadcasted shapes.");
-            }
-            var derA = function () {
-                return _this.scope(function () {
-                    return _this.multiply(dy, _this.multiply(b, _this.pow(a, _this.subtract(b, ndarray_1.Scalar.new(1, 'int32')))));
-                });
-            };
-            var derB = function () {
-                throw new Error("Backprop through exponent of math.pow not " +
-                    "implemented yet.");
-            };
-            return { a: derA, b: derB };
+    return descriptor;
+}
+exports.operation = operation;
+
+},{"../globals":35}],123:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var array_ops = require("./array_ops");
+var batchnorm_ops = require("./batchnorm");
+var binary_ops = require("./binary_ops");
+var compare_ops = require("./compare");
+var concat_ops = require("./concat");
+var conv_ops = require("./conv");
+var image_ops = require("./image_ops");
+var logical_ops = require("./logical_ops");
+var lrn_ops = require("./lrn");
+var lstm_ops = require("./lstm");
+var matmul_ops = require("./matmul");
+var norm_ops = require("./norm");
+var pool_ops = require("./pool");
+var reduction_ops = require("./reduction_ops");
+var reverse_ops = require("./reverse");
+var slice_ops = require("./slice");
+var softmax_ops = require("./softmax");
+var transpose_ops = require("./transpose");
+var unary_ops = require("./unary_ops");
+exports.batchNormalization = batchnorm_ops.Ops.batchNormalization;
+exports.batchNormalization2d = batchnorm_ops.Ops.batchNormalization2d;
+exports.batchNormalization3d = batchnorm_ops.Ops.batchNormalization3d;
+exports.batchNormalization4d = batchnorm_ops.Ops.batchNormalization4d;
+exports.concat = concat_ops.Concat.concat;
+exports.concat1d = concat_ops.Concat.concat1d;
+exports.concat2d = concat_ops.Concat.concat2d;
+exports.concat3d = concat_ops.Concat.concat3d;
+exports.concat4d = concat_ops.Concat.concat4d;
+exports.conv1d = conv_ops.Ops.conv1d;
+exports.conv2d = conv_ops.Ops.conv2d;
+exports.conv2dTranspose = conv_ops.Ops.conv2dTranspose;
+exports.depthwiseConv2d = conv_ops.Ops.depthwiseConv2d;
+exports.matMul = matmul_ops.Ops.matMul;
+exports.matrixTimesVector = matmul_ops.Ops.matrixTimesVector;
+exports.outerProduct = matmul_ops.Ops.outerProduct;
+exports.vectorTimesMatrix = matmul_ops.Ops.vectorTimesMatrix;
+exports.avgPool = pool_ops.Ops.avgPool;
+exports.maxPool = pool_ops.Ops.maxPool;
+exports.minPool = pool_ops.Ops.minPool;
+exports.transpose = transpose_ops.Ops.transpose;
+exports.reverse = reverse_ops.Ops.reverse;
+exports.reverse1d = reverse_ops.Ops.reverse1d;
+exports.reverse2d = reverse_ops.Ops.reverse2d;
+exports.reverse3d = reverse_ops.Ops.reverse3d;
+exports.reverse4d = reverse_ops.Ops.reverse4d;
+exports.slice = slice_ops.Ops.slice;
+exports.slice1d = slice_ops.Ops.slice1d;
+exports.slice2d = slice_ops.Ops.slice2d;
+exports.slice3d = slice_ops.Ops.slice3d;
+exports.slice4d = slice_ops.Ops.slice4d;
+exports.argMax = reduction_ops.Ops.argMax;
+exports.argMin = reduction_ops.Ops.argMin;
+exports.logSumExp = reduction_ops.Ops.logSumExp;
+exports.max = reduction_ops.Ops.max;
+exports.mean = reduction_ops.Ops.mean;
+exports.min = reduction_ops.Ops.min;
+exports.moments = reduction_ops.Ops.moments;
+exports.sum = reduction_ops.Ops.sum;
+exports.equal = compare_ops.Ops.equal;
+exports.equalStrict = compare_ops.Ops.equalStrict;
+exports.greater = compare_ops.Ops.greater;
+exports.greaterStrict = compare_ops.Ops.greaterStrict;
+exports.greaterEqual = compare_ops.Ops.greaterEqual;
+exports.greaterEqualStrict = compare_ops.Ops.greaterEqualStrict;
+exports.less = compare_ops.Ops.less;
+exports.lessStrict = compare_ops.Ops.lessStrict;
+exports.lessEqual = compare_ops.Ops.lessEqual;
+exports.lessEqualStrict = compare_ops.Ops.lessEqualStrict;
+exports.notEqual = compare_ops.Ops.notEqual;
+exports.notEqualStrict = compare_ops.Ops.notEqualStrict;
+exports.logicalNot = logical_ops.Ops.logicalNot;
+exports.logicalAnd = logical_ops.Ops.logicalAnd;
+exports.logicalOr = logical_ops.Ops.logicalOr;
+exports.logicalXor = logical_ops.Ops.logicalXor;
+exports.where = logical_ops.Ops.where;
+exports.abs = unary_ops.Ops.abs;
+exports.acos = unary_ops.Ops.acos;
+exports.asin = unary_ops.Ops.asin;
+exports.atan = unary_ops.Ops.atan;
+exports.ceil = unary_ops.Ops.ceil;
+exports.clipByValue = unary_ops.Ops.clipByValue;
+exports.cos = unary_ops.Ops.cos;
+exports.cosh = unary_ops.Ops.cosh;
+exports.elu = unary_ops.Ops.elu;
+exports.exp = unary_ops.Ops.exp;
+exports.floor = unary_ops.Ops.floor;
+exports.leakyRelu = unary_ops.Ops.leakyRelu;
+exports.log = unary_ops.Ops.log;
+exports.neg = unary_ops.Ops.neg;
+exports.prelu = unary_ops.Ops.prelu;
+exports.relu = unary_ops.Ops.relu;
+exports.selu = unary_ops.Ops.selu;
+exports.sigmoid = unary_ops.Ops.sigmoid;
+exports.sin = unary_ops.Ops.sin;
+exports.sinh = unary_ops.Ops.sinh;
+exports.sqrt = unary_ops.Ops.sqrt;
+exports.square = unary_ops.Ops.square;
+exports.step = unary_ops.Ops.step;
+exports.tan = unary_ops.Ops.tan;
+exports.tanh = unary_ops.Ops.tanh;
+exports.add = binary_ops.Ops.add;
+exports.addStrict = binary_ops.Ops.addStrict;
+exports.div = binary_ops.Ops.div;
+exports.divStrict = binary_ops.Ops.divStrict;
+exports.maximum = binary_ops.Ops.maximum;
+exports.maximumStrict = binary_ops.Ops.maximumStrict;
+exports.minimum = binary_ops.Ops.minimum;
+exports.minimumStrict = binary_ops.Ops.minimumStrict;
+exports.mul = binary_ops.Ops.mul;
+exports.mulStrict = binary_ops.Ops.mulStrict;
+exports.pow = binary_ops.Ops.pow;
+exports.powStrict = binary_ops.Ops.powStrict;
+exports.sub = binary_ops.Ops.sub;
+exports.subStrict = binary_ops.Ops.subStrict;
+exports.norm = norm_ops.Ops.norm;
+exports.cast = array_ops.Ops.cast;
+exports.clone = array_ops.Ops.clone;
+exports.fromPixels = array_ops.Ops.fromPixels;
+exports.ones = array_ops.Ops.ones;
+exports.onesLike = array_ops.Ops.onesLike;
+exports.zeros = array_ops.Ops.zeros;
+exports.zerosLike = array_ops.Ops.zerosLike;
+exports.rand = array_ops.Ops.rand;
+exports.randomNormal = array_ops.Ops.randomNormal;
+exports.truncatedNormal = array_ops.Ops.truncatedNormal;
+exports.randomUniform = array_ops.Ops.randomUniform;
+exports.reshape = array_ops.Ops.reshape;
+exports.squeeze = array_ops.Ops.squeeze;
+exports.tile = array_ops.Ops.tile;
+exports.gather = array_ops.Ops.gather;
+exports.oneHot = array_ops.Ops.oneHot;
+exports.linspace = array_ops.Ops.linspace;
+exports.range = array_ops.Ops.range;
+exports.buffer = array_ops.Ops.buffer;
+exports.fill = array_ops.Ops.fill;
+exports.tensor = array_ops.Ops.tensor;
+exports.scalar = array_ops.Ops.scalar;
+exports.tensor1d = array_ops.Ops.tensor1d;
+exports.tensor2d = array_ops.Ops.tensor2d;
+exports.tensor3d = array_ops.Ops.tensor3d;
+exports.tensor4d = array_ops.Ops.tensor4d;
+exports.print = array_ops.Ops.print;
+exports.expandDims = array_ops.Ops.expandDims;
+exports.stack = array_ops.Ops.stack;
+exports.pad = array_ops.Ops.pad;
+exports.pad1d = array_ops.Ops.pad1d;
+exports.pad2d = array_ops.Ops.pad2d;
+exports.basicLSTMCell = lstm_ops.Ops.basicLSTMCell;
+exports.multiRNNCell = lstm_ops.Ops.multiRNNCell;
+exports.softmax = softmax_ops.Ops.softmax;
+exports.localResponseNormalization = lrn_ops.LRN.localResponseNormalization;
+var tensor_1 = require("../tensor");
+var types_1 = require("../types");
+[tensor_1.Tensor, types_1.Rank, tensor_1.Tensor3D, tensor_1.Tensor4D];
+exports.losses = {
+    softmaxCrossEntropy: softmax_ops.Ops.softmaxCrossEntropy
+};
+exports.image = {
+    resizeBilinear: image_ops.Ops.resizeBilinear
+};
+
+},{"../tensor":146,"../types":150,"./array_ops":106,"./batchnorm":108,"./binary_ops":109,"./compare":111,"./concat":112,"./conv":114,"./image_ops":116,"./logical_ops":117,"./lrn":118,"./lstm":119,"./matmul":120,"./norm":121,"./pool":124,"./reduction_ops":127,"./reverse":128,"./slice":130,"./softmax":132,"./transpose":133,"./unary_ops":134}],124:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var util = require("../util");
+var conv_util = require("./conv_util");
+var operation_1 = require("./operation");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.maxPool = function (x, filterSize, strides, pad, dimRoundingMode) {
+        var x4D = x;
+        var reshapedTo4D = false;
+        if (x.rank === 3) {
+            reshapedTo4D = true;
+            x4D = x.as4D(1, x.shape[0], x.shape[1], x.shape[2]);
+        }
+        util.assert(x4D.rank === 4, "Error in maxPool: input must be rank 4 but got rank " + x4D.rank + ".");
+        if (dimRoundingMode != null) {
+            util.assert(util.isInt(pad), "Error in maxPool: pad must be an integer when using, " +
+                ("dimRoundingMode " + dimRoundingMode + " but got pad " + pad + "."));
+        }
+        var convInfo = conv_util.computePool2DInfo(x4D.shape, filterSize, strides, pad, dimRoundingMode);
+        var gradients = function (dy, y) {
+            return { x: function () { return Ops.maxPoolBackprop(dy, x4D, filterSize, strides, pad); } };
         };
-        return this.backendEngine.executeKernel('Pow', { inputs: { a: a, b: b } }, gradient);
-    };
-    NDArrayMath.prototype.powStrict = function (a, b) {
-        util.assertShapesMatch(a.shape, b.shape, 'Error in powStrict: ');
-        return this.pow(a, b);
-    };
-    NDArrayMath.prototype.sub = function (a, b) {
-        return this.subtract(a, b);
-    };
-    NDArrayMath.prototype.subStrict = function (a, b) {
-        util.assertShapesMatch(a.shape, b.shape, 'Error in subStrict: ');
-        return this.subtract(a, b);
-    };
-    NDArrayMath.prototype.multiply = function (a, b) {
-        var _this = this;
-        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
-        return this.backendEngine.executeKernel('Mul', { inputs: { a: a, b: b } }, function (dy, y) {
-            if (!util.arraysEqual(a.shape, b.shape)) {
-                throw new Error("Backprop through broadcasted multiply not " +
-                    "supported yet.");
-            }
-            return { a: function () { return _this.clone(b); }, b: function () { return _this.clone(a); } };
-        });
-    };
-    NDArrayMath.prototype.elementWiseMul = function (a, b) {
-        return this.multiplyStrict(a, b);
-    };
-    NDArrayMath.prototype.multiplyStrict = function (a, b) {
-        util.assertShapesMatch(a.shape, b.shape, 'Error in multiplyStrict: ');
-        return this.multiply(a, b);
-    };
-    NDArrayMath.prototype.divide = function (a, b) {
-        broadcast_util.assertAndGetBroadcastShape(a.shape, b.shape);
-        return this.backendEngine.executeKernel('Div', { inputs: { a: a, b: b } });
-    };
-    NDArrayMath.prototype.divideStrict = function (a, b) {
-        util.assertShapesMatch(a.shape, b.shape, 'Error in divideStrict: ');
-        return this.divide(a, b);
-    };
-    NDArrayMath.prototype.scalarDividedByArray = function (c, a) {
-        util.assert(c.size === 1, "Error in scalarDividedByArray: first argument must be rank 0, but " +
-            ("got NDArray of rank " + c.rank + "."));
-        return this.divide(c, a);
-    };
-    NDArrayMath.prototype.arrayDividedByScalar = function (a, c) {
-        util.assert(c.size === 1, "Error in arrayDividedByScalar: second argument must be rank 0, " +
-            ("but got NDArray of rank " + c.rank + "."));
-        return this.divide(a, c);
-    };
-    NDArrayMath.prototype.ceil = function (x) {
-        return this.backendEngine.executeKernel('Ceil', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.floor = function (x) {
-        return this.backendEngine.executeKernel('Floor', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.exp = function (x) {
-        return this.backendEngine.executeKernel('Exp', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.log = function (x) {
-        return this.backendEngine.executeKernel('Log', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.sqrt = function (x) {
-        return this.backendEngine.executeKernel('Sqrt', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.square = function (x) {
-        var _this = this;
-        return this.backendEngine.executeKernel('Square', { inputs: { x: x } }, function (dy, y) {
-            return {
-                x: function () { return _this.multiply(dy, _this.multiply(x, ndarray_1.Scalar.new(2))); }
-            };
-        });
-    };
-    NDArrayMath.prototype.abs = function (x) {
-        return this.backendEngine.executeKernel('Abs', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.clip = function (x, min, max) {
-        util.assert((min <= max), "Error in clip: min (" + min + ") must be" +
-            ("less than or equal to max (" + max + ")."));
-        return this.backendEngine.executeKernel('Clip', { inputs: { x: x }, args: { min: min, max: max } });
-    };
-    NDArrayMath.prototype.relu = function (x) {
-        var _this = this;
-        return this.backendEngine.executeKernel('Relu', { inputs: { x: x } }, function (dy, y) {
-            return { x: function () { return _this.step(x); } };
-        });
-    };
-    NDArrayMath.prototype.elu = function (x) {
-        return this.backendEngine.executeKernel('Elu', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.eluDer = function (x) {
-        return this.backendEngine.executeKernel('EluDer', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.selu = function (x) {
-        return this.backendEngine.executeKernel('Selu', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.leakyRelu = function (x, alpha) {
-        if (alpha === void 0) { alpha = 0.2; }
-        return this.backendEngine.executeKernel('LeakyRelu', { inputs: { x: x }, args: { alpha: alpha } });
-    };
-    NDArrayMath.prototype.prelu = function (x, alpha) {
-        return this.backendEngine.executeKernel('PReLU', { inputs: { x: x, alpha: alpha } });
-    };
-    NDArrayMath.prototype.preluDer = function (x, alpha) {
-        return this.backendEngine.executeKernel('PReLUDer', { inputs: { x: x, alpha: alpha } });
-    };
-    NDArrayMath.prototype.sigmoid = function (x) {
-        return this.backendEngine.executeKernel('Sigmoid', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.sin = function (x) {
-        return this.backendEngine.executeKernel('Sin', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.cos = function (x) {
-        return this.backendEngine.executeKernel('Cos', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.tan = function (x) {
-        return this.backendEngine.executeKernel('Tan', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.asin = function (x) {
-        return this.backendEngine.executeKernel('Asin', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.acos = function (x) {
-        return this.backendEngine.executeKernel('Acos', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.atan = function (x) {
-        return this.backendEngine.executeKernel('Atan', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.sinh = function (x) {
-        return this.backendEngine.executeKernel('Sinh', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.cosh = function (x) {
-        return this.backendEngine.executeKernel('Cosh', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.tanh = function (x) {
-        return this.backendEngine.executeKernel('Tanh', { inputs: { x: x } });
-    };
-    NDArrayMath.prototype.step = function (x, alpha) {
-        if (alpha === void 0) { alpha = 0.0; }
-        return this.backendEngine.executeKernel('Step', { inputs: { x: x }, args: { alpha: alpha } });
-    };
-    NDArrayMath.prototype.scaledArrayAdd = function (c1, a, c2, b) {
-        var _this = this;
-        util.assert(c1.size === 1, "Error in scaledArrayAdd: first argument must rank 0, but got " +
-            (" rank " + c1.rank + "."));
-        util.assert(c2.size === 1, "Error in scaledArrayAdd: third argument must be rank 0, but got " +
-            ("NDArray of rank " + c2.rank + "."));
-        util.assertShapesMatch(a.shape, b.shape, 'Error in scaledArrayAdd: ');
-        return this.executeOp('scaledArrayAdd', function () {
-            return _this.scope(function () {
-                return _this.add(_this.multiply(c1, a), _this.multiply(c2, b));
-            });
-        });
-    };
-    NDArrayMath.prototype.scalarTimesArray = function (c, a) {
-        util.assert(c.size === 1, "Error in arrayDividedByScalar: first argument must be rank 0, but " +
-            ("got rank " + c.rank + "."));
-        return this.multiply(c, a);
-    };
-    NDArrayMath.prototype.elementWiseMulBroadcast = function (a, b) {
-        util.assert(a.rank === 2, "Error in elementWiseMulBroadcast: first argument must be " +
-            ("rank 2, but got rank " + a.rank + "."));
-        util.assert(b.rank === 2, "Error in elementWiseMulBroadcast: second argument must be " +
-            ("rank 2, but got rank " + b.rank + "."));
-        return this.multiply(a, b);
-    };
-    NDArrayMath.prototype.conv1d = function (input, filter, bias, stride, pad) {
-        var _this = this;
-        var input3D = input;
-        var reshapedTo3D = false;
-        if (input.rank === 2) {
-            reshapedTo3D = true;
-            input3D = input.as3D(1, input.shape[0], input.shape[1]);
+        var res = environment_1.ENV.engine.executeKernel('MaxPool', { inputs: { x: x4D }, args: { convInfo: convInfo } }, gradients);
+        if (reshapedTo4D) {
+            return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
         }
-        util.assert(input3D.rank === 3, "Error in conv1d: input must be rank 3, but got rank " + input3D.rank + ".");
-        util.assert(filter.rank === 3, "Error in conv1d: filter must be rank 3, but got rank " +
-            (filter.rank + "."));
-        if (bias != null) {
-            util.assert(bias.rank === 1, "Error in conv1d: bias must be rank 1, but got rank " +
-                (bias.rank + "."));
-        }
-        util.assert(input3D.shape[2] === filter.shape[1], "Error in conv1d: depth of input (" + input3D.shape[2] + ") must match  " +
-            ("input depth for filter " + filter.shape[1] + "."));
-        var filter4D = filter.as4D(1, filter.shape[0], filter.shape[1], filter.shape[2]);
-        var input4D = input3D.as4D(input3D.shape[0], 1, input3D.shape[1], input3D.shape[2]);
-        var strides = [1, stride];
-        return this.executeOp('Conv1D', function () {
-            var res = _this.conv2d(input4D, filter4D, bias, strides, pad);
-            if (reshapedTo3D) {
-                return res.as2D(res.shape[2], res.shape[3]);
-            }
-            return res.as3D(res.shape[0], res.shape[2], res.shape[3]);
-        });
+        return res;
     };
-    NDArrayMath.prototype.conv2d = function (input, filter, bias, strides, pad) {
-        var _this = this;
-        var input4D = input;
-        var reshapedTo4D = false;
-        if (input.rank === 3) {
-            reshapedTo4D = true;
-            input4D = input.as4D(1, input.shape[0], input.shape[1], input.shape[2]);
-        }
-        util.assert(input4D.rank === 4, "Error in conv2d: input must be rank 4, but got rank " + input4D.rank + ".");
-        util.assert(filter.rank === 4, "Error in conv2d: filter must be rank 4, but got rank " +
-            (filter.rank + "."));
-        if (bias != null) {
-            util.assert(bias.rank === 1, "Error in conv2d: bias must be rank 1, but got rank " +
-                (bias.rank + "."));
-        }
-        util.assert(input4D.shape[3] === filter.shape[2], "Error in conv2d: depth of input (" + input4D.shape[3] + ") must match  " +
-            ("input depth for filter " + filter.shape[2] + "."));
-        var convInfo = conv_util.computeConv2DInfo(input4D.shape, filter.shape, strides, pad);
-        return this.executeOp('Conv2D', function () {
-            var res = _this.backendEngine.executeKernel('Conv2D', { inputs: { x: input4D, filter: filter, bias: bias }, args: { convInfo: convInfo } });
-            if (reshapedTo4D) {
-                return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
-            }
-            return res;
-        });
-    };
-    NDArrayMath.prototype.conv2dDerInput = function (inShape, dy, filter, strides, pad) {
-        var _this = this;
-        util.assert(inShape.length === dy.rank, "Length of inShape " +
-            ("(" + inShape.length + ") and rank of dy (" + dy.rank + ") must match"));
-        var inShape4D = inShape;
-        var dy4D = dy;
-        var reshapedTo4D = false;
-        if (dy.rank === 3) {
-            reshapedTo4D = true;
-            dy4D = dy.as4D(1, dy.shape[0], dy.shape[1], dy.shape[2]);
-            inShape4D = [1, inShape[0], inShape[1], inShape[2]];
-        }
-        var inDepth = inShape4D[3];
-        var outDepth = dy4D.shape[3];
-        util.assert(inShape4D.length === 4, "Error in conv2dDerInput: inShape must be length 4, but got length " +
-            (inShape4D.length + "."));
-        util.assert(dy4D.rank === 4, "Error in conv2dDerInput: dy must be rank 4, but got " +
-            ("rank " + dy4D.rank));
-        util.assert(filter.rank === 4, "Error in conv2dDerInput: filter must be rank 4, but got " +
-            ("rank " + filter.rank));
-        util.assert(inDepth === filter.shape[2], "Error in conv2dDerInput: depth of input (" + inDepth + ") must " +
-            ("match input depth for filter " + filter.shape[2] + "."));
-        util.assert(outDepth === filter.shape[3], "Error in conv2dDerInput: depth of output (" + outDepth + ") must" +
-            ("match output depth for filter " + filter.shape[3] + "."));
-        var convInfo = conv_util.computeConv2DInfo(inShape4D, filter.shape, strides, pad);
-        return this.executeOp('conv2dDerInput', function () {
-            var res = _this.backendEngine.executeKernel('Conv2DDerInput', { inputs: { dy: dy4D, filter: filter }, args: { convInfo: convInfo } });
-            if (reshapedTo4D) {
-                return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
-            }
-            return res;
-        });
-    };
-    NDArrayMath.prototype.conv2dDerBias = function (dy) {
-        var dy4D = dy;
-        if (dy.rank === 3) {
-            dy4D = dy.as4D(1, dy.shape[0], dy.shape[1], dy.shape[2]);
-        }
-        return this.backendEngine.executeKernel('Conv2DDerBias', { inputs: { dy: dy4D } });
-    };
-    NDArrayMath.prototype.conv2dDerFilter = function (input, dy, filterShape, strides, pad) {
-        var input4D = input;
-        if (input.rank === 3) {
-            input4D = input.as4D(1, input.shape[0], input.shape[1], input.shape[2]);
-        }
-        var dy4D = dy;
-        if (dy4D.rank === 3) {
-            dy4D = dy.as4D(1, dy.shape[0], dy.shape[1], dy.shape[2]);
-        }
-        util.assert(input4D.rank === 4, "Error in conv2dDerFilter: input must be rank 4, but got shape " +
-            (input4D.shape + "."));
-        util.assert(dy4D.rank === 4, "Error in conv2dDerFilter: dy must be rank 4, but got shape " +
-            (dy4D.shape + "."));
-        util.assert(filterShape.length === 4, "Error in conv2dDerFilter: filterShape must be length 4, but got " +
-            (filterShape + "."));
-        util.assert(input4D.shape[3] === filterShape[2], "Error in conv2dDerFilter: depth of input " + input4D.shape[3] + ") must " +
-            ("match input depth in filter (" + filterShape[2] + "."));
-        util.assert(dy4D.shape[3] === filterShape[3], "Error in conv2dDerFilter: depth of dy (" + dy4D.shape[3] + ") must " +
-            ("match output depth for filter (" + filterShape[3] + ")."));
-        var convInfo = conv_util.computeConv2DInfo(input4D.shape, filterShape, strides, pad);
-        return this.backendEngine.executeKernel('Conv2DDerFilter', { inputs: { x: input4D, dy: dy4D }, args: { convInfo: convInfo } });
-    };
-    NDArrayMath.prototype.conv2dTranspose = function (x, filter, outputShape, strides, pad) {
-        return this.conv2dDerInput(outputShape, x, filter, strides, pad);
-    };
-    NDArrayMath.prototype.depthwiseConv2D = function (input, filter, strides, pad, rates) {
-        var _this = this;
-        if (rates === void 0) { rates = [1, 1]; }
-        var input4D = input;
-        var reshapedTo4D = false;
-        if (input.rank === 3) {
-            reshapedTo4D = true;
-            input4D = input.as4D(1, input.shape[0], input.shape[1], input.shape[2]);
-        }
-        util.assert(input4D.rank === 4, "Error in depthwiseConv2D: input must be rank 4, but got " +
-            ("rank " + input4D.rank + "."));
-        util.assert(filter.rank === 4, "Error in depthwiseConv2D: filter must be rank 4, but got rank " +
-            (filter.rank + "."));
-        util.assert(input4D.shape[3] === filter.shape[2], "Error in depthwiseConv2D: number of input channels " +
-            ("(" + input4D.shape[3] + ") must match the inChannels dimension in ") +
-            ("filter " + filter.shape[2] + "."));
-        rates = rates || [1, 1];
-        var _a = parseTupleParam(rates), rateHeight = _a[0], rateWidth = _a[1];
-        util.assert(rateHeight === 1 && rateWidth === 1, 'Error in depthwiseConv2D: rates greater than 1 are not yet ' +
-            ("supported. Got rates '" + rates + "'"));
-        var convInfo = conv_util.computeConv2DInfo(input4D.shape, filter.shape, strides, pad, true);
-        return this.executeOp('depthwiseConv2D', function () {
-            var res = _this.backendEngine.executeKernel('DepthwiseConv2D', { inputs: { x: input4D, filter: filter }, args: { convInfo: convInfo } });
-            if (reshapedTo4D) {
-                return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
-            }
-            return res;
-        });
-    };
-    NDArrayMath.prototype.maxPool = function (input, filterSize, strides, pad) {
-        var _this = this;
-        var input4D = input;
-        var reshapedTo4D = false;
-        if (input.rank === 3) {
-            reshapedTo4D = true;
-            input4D = input.as4D(1, input.shape[0], input.shape[1], input.shape[2]);
-        }
-        util.assert(input4D.rank === 4, "Error in maxPool: input must be rank 4 but got rank " + input4D.rank + ".");
-        var convInfo = conv_util.computePool2DInfo(input4D.shape, filterSize, strides, pad);
-        return this.executeOp('maxPool', function () {
-            var res = _this.backendEngine.executeKernel('MaxPool', { inputs: { x: input4D }, args: { convInfo: convInfo } });
-            if (reshapedTo4D) {
-                return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
-            }
-            return res;
-        });
-    };
-    NDArrayMath.prototype.maxPoolBackprop = function (dy, input, filterSize, strides, pad) {
-        var _this = this;
+    Ops.maxPoolBackprop = function (dy, input, filterSize, strides, pad, dimRoundingMode) {
         util.assert(input.rank === dy.rank, "Rank of input (" + input.rank + ") does not match rank of dy (" + dy.rank + ")");
         var input4D = input;
         var dy4D = dy;
@@ -12204,17 +15955,18 @@ var NDArrayMath = (function () {
             (dy4D.rank + "."));
         util.assert(input4D.rank === 4, "Error in maxPoolBackprop: input must be rank 4 but got rank " +
             (input4D.rank + "."));
-        var convInfo = conv_util.computePool2DInfo(input4D.shape, filterSize, strides, pad);
-        return this.executeOp('maxPoolBackprop', function () {
-            var res = _this.backendEngine.executeKernel('MaxPoolBackprop', { inputs: { dy: dy4D, x: input4D }, args: { convInfo: convInfo } });
-            if (reshapedTo4D) {
-                return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
-            }
-            return res;
-        });
+        if (dimRoundingMode != null) {
+            util.assert(util.isInt(pad), "Error in maxPoolBackprop: pad must be an integer when using, " +
+                ("dimRoundingMode " + dimRoundingMode + " but got pad " + pad + "."));
+        }
+        var convInfo = conv_util.computePool2DInfo(input4D.shape, filterSize, strides, pad, dimRoundingMode);
+        var res = environment_1.ENV.engine.executeKernel('MaxPoolBackprop', { inputs: { dy: dy4D, x: input4D }, args: { convInfo: convInfo } });
+        if (reshapedTo4D) {
+            return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
+        }
+        return res;
     };
-    NDArrayMath.prototype.minPool = function (input, filterSize, strides, pad) {
-        var _this = this;
+    Ops.minPool = function (input, filterSize, strides, pad, dimRoundingMode) {
         var input4D = input;
         var reshapedTo4D = false;
         if (input.rank === 3) {
@@ -12222,1048 +15974,83 @@ var NDArrayMath = (function () {
             input4D = input.as4D(1, input.shape[0], input.shape[1], input.shape[2]);
         }
         util.assert(input4D.rank === 4, "Error in minPool: x must be rank 4 but got rank " + input4D.rank + ".");
-        var convInfo = conv_util.computePool2DInfo(input4D.shape, filterSize, strides, pad);
-        return this.executeOp('minPool', function () {
-            var res = _this.backendEngine.executeKernel('MinPool', { inputs: { x: input4D }, args: { convInfo: convInfo } });
-            if (reshapedTo4D) {
-                return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
-            }
-            return res;
-        });
+        if (dimRoundingMode != null) {
+            util.assert(util.isInt(pad), "Error in minPool: pad must be an integer when using, " +
+                ("dimRoundingMode " + dimRoundingMode + " but got pad " + pad + "."));
+        }
+        var convInfo = conv_util.computePool2DInfo(input4D.shape, filterSize, strides, pad, dimRoundingMode);
+        var res = environment_1.ENV.engine.executeKernel('MinPool', { inputs: { x: input4D }, args: { convInfo: convInfo } });
+        if (reshapedTo4D) {
+            return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
+        }
+        return res;
     };
-    NDArrayMath.prototype.avgPool = function (input, filterSize, strides, pad) {
-        var _this = this;
+    Ops.avgPool = function (x, filterSize, strides, pad, dimRoundingMode) {
+        var x4D = x;
+        var reshapedTo4D = false;
+        if (x.rank === 3) {
+            reshapedTo4D = true;
+            x4D = x.as4D(1, x.shape[0], x.shape[1], x.shape[2]);
+        }
+        util.assert(x4D.rank === 4, "Error in avgPool: x must be rank 4 but got rank " + x4D.rank + ".");
+        if (dimRoundingMode != null) {
+            util.assert(util.isInt(pad), "Error in avgPool: pad must be an integer when using, " +
+                ("dimRoundingMode " + dimRoundingMode + " but got pad " + pad + "."));
+        }
+        var convInfo = conv_util.computePool2DInfo(x4D.shape, filterSize, strides, pad);
+        var gradients = function (dy, y) {
+            return { x: function () { return Ops.avgPoolBackprop(dy, x4D, filterSize, strides, pad); } };
+        };
+        var res = environment_1.ENV.engine.executeKernel('AvgPool', { inputs: { x: x4D }, args: { convInfo: convInfo } }, gradients);
+        if (reshapedTo4D) {
+            return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
+        }
+        return res;
+    };
+    Ops.avgPoolBackprop = function (dy, input, filterSize, strides, pad) {
+        util.assert(input.rank === dy.rank, "Rank of input (" + input.rank + ") does not match rank of dy (" + dy.rank + ")");
         var input4D = input;
+        var dy4D = dy;
         var reshapedTo4D = false;
         if (input.rank === 3) {
             reshapedTo4D = true;
             input4D = input.as4D(1, input.shape[0], input.shape[1], input.shape[2]);
+            dy4D = dy.as4D(1, dy.shape[0], dy.shape[1], dy.shape[2]);
         }
-        util.assert(input4D.rank === 4, "Error in avgPool: x must be rank 4 but got rank " + input4D.rank + ".");
+        util.assert(dy4D.rank === 4, "Error in avgPoolBackprop: dy must be rank 4 but got rank " +
+            (dy4D.rank + "."));
+        util.assert(input4D.rank === 4, "Error in avgPoolBackprop: input must be rank 4 but got rank " +
+            (input4D.rank + "."));
         var convInfo = conv_util.computePool2DInfo(input4D.shape, filterSize, strides, pad);
-        return this.executeOp('avgPool', function () {
-            var res = _this.backendEngine.executeKernel('AvgPool', { inputs: { x: input4D }, args: { convInfo: convInfo } });
-            if (reshapedTo4D) {
-                return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
-            }
-            return res;
-        });
-    };
-    NDArrayMath.prototype.resizeBilinear3D = function (x, newShape2D, alignCorners) {
-        if (alignCorners === void 0) { alignCorners = false; }
-        util.assert(x.rank === 3, "Error in resizeBilinear3D: x must be rank 3 but got rank " + x.rank + ".");
-        util.assert(newShape2D.length === 2, "Error in resizeBilinear3D: new shape must 2D, but got shape " +
-            (newShape2D + "."));
-        return this.backendEngine.executeKernel('ResizeBilinear3D', { inputs: { x: x }, args: { newShape2D: newShape2D, alignCorners: alignCorners } });
-    };
-    NDArrayMath.prototype.batchNormalization2D = function (x, mean, variance, varianceEpsilon, scale, offset) {
-        if (varianceEpsilon === void 0) { varianceEpsilon = .001; }
-        util.assert(x.rank === 2, "Error in batchNormalization3D: x must be rank 3 but got rank " +
-            (x.rank + "."));
-        util.assert(mean.rank === 2 || mean.rank === 1, "Error in batchNormalization2D: mean must be rank 2 or rank 1 but " +
-            ("got rank " + mean.rank + "."));
-        util.assert(variance.rank === 2 || variance.rank === 1, "Error in batchNormalization2D: variance must be rank 2 or rank 1 " +
-            ("but got rank " + variance.rank + "."));
-        if (scale != null) {
-            util.assert(scale.rank === 2 || scale.rank === 1, "Error in batchNormalization2D: scale must be rank 2 or rank 1 " +
-                ("but got rank " + scale.rank + "."));
+        var res = environment_1.ENV.engine.executeKernel('AvgPoolBackprop', { inputs: { dy: dy4D, x: input4D }, args: { convInfo: convInfo } });
+        if (reshapedTo4D) {
+            return res.as3D(res.shape[1], res.shape[2], res.shape[3]);
         }
-        if (offset != null) {
-            util.assert(offset.rank === 2 || offset.rank === 1, "Error in batchNormalization2D: offset must be rank 2 or rank 1 " +
-                ("but got rank " + offset.rank + "."));
-        }
-        return this.backendEngine.executeKernel('BatchNorm2D', { inputs: { x: x, mean: mean, variance: variance, scale: scale, offset: offset }, args: { varianceEpsilon: varianceEpsilon } });
-    };
-    NDArrayMath.prototype.batchNormalization3D = function (x, mean, variance, varianceEpsilon, scale, offset) {
-        if (varianceEpsilon === void 0) { varianceEpsilon = .001; }
-        util.assert(x.rank === 3, "Error in batchNormalization3D: x must be rank 3 but got rank " +
-            (x.rank + "."));
-        util.assert(mean.rank === 3 || mean.rank === 1, "Error in batchNormalization3D: mean must be rank 3 or rank 1 but " +
-            ("got rank " + mean.rank + "."));
-        util.assert(variance.rank === 3 || variance.rank === 1, "Error in batchNormalization3D: variance must be rank 3 or rank 1 " +
-            ("but got rank " + variance.rank + "."));
-        if (scale != null) {
-            util.assert(scale.rank === 3 || scale.rank === 1, "Error in batchNormalization3D: scale must be rank 3 or rank 1 " +
-                ("but got rank " + scale.rank + "."));
-        }
-        if (offset != null) {
-            util.assert(offset.rank === 3 || offset.rank === 1, "Error in batchNormalization3D: offset must be rank 3 or rank 1 " +
-                ("but got rank " + offset.rank + "."));
-        }
-        return this.backendEngine.executeKernel('BatchNorm3D', { inputs: { x: x, mean: mean, variance: variance, scale: scale, offset: offset }, args: { varianceEpsilon: varianceEpsilon } });
-    };
-    NDArrayMath.prototype.batchNormalization4D = function (x, mean, variance, varianceEpsilon, scale, offset) {
-        if (varianceEpsilon === void 0) { varianceEpsilon = .001; }
-        util.assert(x.rank === 4, "Error in batchNormalization4D: x must be rank 4 but got rank " +
-            (x.rank + "."));
-        util.assert(mean.rank === 4 || mean.rank === 1, "Error in batchNormalization4D: mean must be rank 4 or rank 1 but " +
-            ("got rank " + mean.rank + "."));
-        util.assert(variance.rank === 4 || variance.rank === 1, "Error in batchNormalization4D: variance must be rank 4 or rank 1 " +
-            ("but got rank " + variance.rank + "."));
-        if (scale != null) {
-            util.assert(scale.rank === 4 || scale.rank === 1, "Error in batchNormalization4D: scale must be rank 4 or rank 1 " +
-                ("but got rank " + scale.rank + "."));
-        }
-        if (offset != null) {
-            util.assert(offset.rank === 4 || offset.rank === 1, "Error in batchNormalization4D: offset must be rank 4 or rank 1 " +
-                ("but got rank " + offset.rank + "."));
-        }
-        return this.backendEngine.executeKernel('BatchNorm4D', { inputs: { x: x, mean: mean, variance: variance, scale: scale, offset: offset }, args: { varianceEpsilon: varianceEpsilon } });
-    };
-    NDArrayMath.prototype.multiRNNCell = function (lstmCells, data, c, h) {
-        var res = this.scope(function () {
-            var input = data;
-            var newStates = [];
-            for (var i = 0; i < lstmCells.length; i++) {
-                var output = lstmCells[i](input, c[i], h[i]);
-                newStates.push(output[0]);
-                newStates.push(output[1]);
-                input = output[1];
-            }
-            return newStates;
-        });
-        var newC = [];
-        var newH = [];
-        for (var i = 0; i < res.length; i += 2) {
-            newC.push(res[i]);
-            newH.push(res[i + 1]);
-        }
-        return [newC, newH];
-    };
-    NDArrayMath.prototype.basicLSTMCell = function (forgetBias, lstmKernel, lstmBias, data, c, h) {
-        var _this = this;
-        var res = this.scope(function () {
-            var combined = _this.concat2D(data, h, 1);
-            var weighted = _this.matMul(combined, lstmKernel);
-            var res = _this.add(weighted, lstmBias);
-            var batchSize = res.shape[0];
-            var sliceCols = res.shape[1] / 4;
-            var sliceSize = [batchSize, sliceCols];
-            var i = _this.slice2D(res, [0, 0], sliceSize);
-            var j = _this.slice2D(res, [0, sliceCols], sliceSize);
-            var f = _this.slice2D(res, [0, sliceCols * 2], sliceSize);
-            var o = _this.slice2D(res, [0, sliceCols * 3], sliceSize);
-            var newC = _this.addStrict(_this.multiplyStrict(c, _this.sigmoid(_this.scalarPlusArray(forgetBias, f))), _this.multiplyStrict(_this.sigmoid(i), _this.tanh(j)));
-            var newH = _this.multiplyStrict(_this.tanh(newC), _this.sigmoid(o));
-            return [newC, newH];
-        });
-        return [res[0], res[1]];
-    };
-    NDArrayMath.prototype.multinomial = function (probabilities, numSamples, seed) {
-        var _this = this;
-        var numOutcomes = probabilities.size;
-        if (numOutcomes < 2) {
-            throw new Error("Error in multinomial: you need at least 2 outcomes, but got " +
-                (numOutcomes + "."));
-        }
-        if (probabilities.rank > 2) {
-            throw new Error("Rank of probabilities must be 1 or 2, but is " + probabilities.rank);
-        }
-        seed = seed || Math.random();
-        var origRank = probabilities.rank;
-        if (probabilities.rank === 1) {
-            probabilities = probabilities.as2D(1, -1);
-        }
-        return this.executeOp('multinomial', function () {
-            var res = _this.backendEngine.executeKernel('Multinomial', {
-                inputs: { probs: probabilities },
-                args: { numSamples: numSamples, seed: seed }
-            });
-            if (origRank === 1) {
-                return res.as1D();
-            }
-            return res;
-        });
-    };
-    NDArrayMath.prototype.oneHot = function (indices, depth, onValue, offValue) {
-        if (onValue === void 0) { onValue = 1; }
-        if (offValue === void 0) { offValue = 0; }
-        if (depth < 2) {
-            throw new Error("Error in oneHot: depth must be >=2, but it is " + depth);
-        }
-        return this.backendEngine.executeKernel('OneHot', { inputs: { indices: indices }, args: { depth: depth, onValue: onValue, offValue: offValue } });
-    };
-    NDArrayMath.prototype.moments = function (x, axis, keepDims) {
-        var _this = this;
-        if (axis === void 0) { axis = null; }
-        if (keepDims === void 0) { keepDims = false; }
-        var axes = axis_util.parseAxisParam(axis, x.shape);
-        var result = this.scope(function () {
-            var mean = _this.mean(x, axes, keepDims);
-            var keepDimsShape = mean.shape;
-            if (!keepDims) {
-                keepDimsShape = axis_util.expandShapeToKeepDim(mean.shape, axes);
-            }
-            var devSquared = _this.square(_this.subtract(x, mean.reshape(keepDimsShape)));
-            var variance = _this.mean(devSquared, axes, keepDims);
-            return { mean: mean, variance: variance };
-        });
-        return result;
-    };
-    NDArrayMath.prototype.norm = function (x, ord, axis, keepDims) {
-        var _this = this;
-        if (ord === void 0) { ord = 'euclidean'; }
-        if (axis === void 0) { axis = null; }
-        if (keepDims === void 0) { keepDims = false; }
-        return this.scope(function () {
-            var norm = _this.normInternal(x, ord, axis);
-            var keepDimsShape = norm.shape;
-            if (keepDims) {
-                var axes = axis_util.parseAxisParam(axis, x.shape);
-                keepDimsShape = axis_util.expandShapeToKeepDim(norm.shape, axes);
-            }
-            return norm.reshape(keepDimsShape);
-        });
-    };
-    NDArrayMath.prototype.normInternal = function (x, p, axis) {
-        if (axis === void 0) { axis = null; }
-        if (x.rank === 0) {
-            return this.abs(x);
-        }
-        if (x.rank !== 1 && axis === null) {
-            return this.normInternal(x.reshape([-1]), p, axis);
-        }
-        if (x.rank === 1 || typeof axis === 'number' ||
-            axis instanceof Array && axis.length === 1) {
-            if (p === 1) {
-                return this.sum(this.abs(x), axis);
-            }
-            if (p === Infinity) {
-                return this.max(this.abs(x), axis);
-            }
-            if (p === -Infinity) {
-                return this.min(this.abs(x), axis);
-            }
-            if (p === 'euclidean' || p === 2) {
-                return this.sqrt(this.sum(this.pow(this.abs(x), ndarray_1.Scalar.new(2, 'int32')), axis));
-            }
-            throw new Error("Error in norm: invalid ord value: " + p);
-        }
-        if (axis instanceof Array && axis.length === 2) {
-            if (p === 1) {
-                return this.max(this.sum(this.abs(x), axis[0]), axis[1] - 1);
-            }
-            if (p === Infinity) {
-                return this.max(this.sum(this.abs(x), axis[1]), axis[0]);
-            }
-            if (p === -Infinity) {
-                return this.min(this.sum(this.abs(x), axis[1]), axis[0]);
-            }
-            if (p === 'fro' || p === 'euclidean') {
-                return this.sqrt(this.sum(this.pow(x, ndarray_1.Scalar.new(2, 'int32')), axis));
-            }
-            throw new Error("Error in norm: invalid ord value: " + p);
-        }
-        throw new Error("Error in norm: invalid axis: " + axis);
-    };
-    NDArrayMath.prototype.gradients = function (f, x) {
-        var keys = x instanceof ndarray_1.NDArray ? null : Object.keys(x);
-        var xs = util.flattenNameArrayMap(x, keys);
-        var returnValue = false;
-        var gradients = this.backendEngine.gradients(f, xs, returnValue);
-        if (x instanceof ndarray_1.NDArray) {
-            return gradients[0];
-        }
-        else {
-            return util.unflattenToNameArrayMap(keys, gradients);
-        }
-    };
-    NDArrayMath.prototype.valueAndGradients = function (f, x) {
-        var keys = x instanceof ndarray_1.NDArray ? null : Object.keys(x);
-        var xs = util.flattenNameArrayMap(x, keys);
-        var returnValue = true;
-        var valueAndGradients = this.backendEngine.gradients(f, xs, returnValue);
-        var gradients;
-        if (x instanceof ndarray_1.NDArray) {
-            gradients = valueAndGradients.gradients[0];
-        }
-        else {
-            gradients =
-                util.unflattenToNameArrayMap(keys, valueAndGradients.gradients);
-        }
-        return { value: valueAndGradients.value, gradients: gradients };
-    };
-    NDArrayMath.prototype.disposeData = function (id) {
-        if (this.registeredArrays.has(id)) {
-            this.registeredArrays.delete(id);
-            this.backend.disposeData(id);
-        }
-    };
-    return NDArrayMath;
-}());
-exports.NDArrayMath = NDArrayMath;
-function parseTupleParam(param) {
-    return typeof param === 'number' ? [param, param] : param;
-}
-
-},{"../environment":15,"../util":100,"./axis_util":54,"./backends/backend_engine":56,"./backends/types/matmul":60,"./broadcast_util":89,"./concat_util":90,"./conv_util":91,"./ndarray":94,"./slice_util":97}],94:[function(require,module,exports){
-"use strict";
-var __extends = (this && this.__extends) || (function () {
-    var extendStatics = Object.setPrototypeOf ||
-        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
-        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
-    return function (d, b) {
-        extendStatics(d, b);
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-})();
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __generator = (this && this.__generator) || function (thisArg, body) {
-    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
-    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
-    function verb(n) { return function (v) { return step([n, v]); }; }
-    function step(op) {
-        if (f) throw new TypeError("Generator is already executing.");
-        while (_) try {
-            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
-            if (y = 0, t) op = [0, t.value];
-            switch (op[0]) {
-                case 0: case 1: t = op; break;
-                case 4: _.label++; return { value: op[1], done: false };
-                case 5: _.label++; y = op[1]; op = [0]; continue;
-                case 7: op = _.ops.pop(); _.trys.pop(); continue;
-                default:
-                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
-                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
-                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
-                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
-                    if (t[2]) _.ops.pop();
-                    _.trys.pop(); continue;
-            }
-            op = body.call(thisArg, _);
-        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
-        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
-    }
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-var environment_1 = require("../environment");
-var util = require("../util");
-var rand_1 = require("./rand");
-var DType;
-(function (DType) {
-    DType["float32"] = "float32";
-    DType["int32"] = "int32";
-    DType["bool"] = "bool";
-})(DType = exports.DType || (exports.DType = {}));
-var NDArray = (function () {
-    function NDArray(shape, dtype, values, id, math) {
-        this.isDisposed = false;
-        this.math = math || environment_1.ENV.math;
-        this.size = util.sizeFromShape(shape);
-        if (values != null) {
-            util.assert(this.size === values.length, "Constructing ndarray of shape (" + this.size + ") should match the " +
-                ("length of values (" + values.length + ")"));
-        }
-        this.shape = shape;
-        this.dtype = dtype || 'float32';
-        var dim = this.shape.length;
-        if (dim < 2) {
-            this.strides = [];
-        }
-        else {
-            this.strides = new Array(dim - 1);
-            this.strides[dim - 2] = this.shape[dim - 1];
-            for (var i = dim - 3; i >= 0; --i) {
-                this.strides[i] = this.strides[i + 1] * this.shape[i + 1];
-            }
-        }
-        this.id = id;
-        this.rankType = (this.rank < 5 ? this.rank.toString() : 'higher');
-        if (this.id == null) {
-            this.id = NDArray.nextId++;
-            this.math.register(this);
-        }
-        if (values != null) {
-            this.math.write(this.id, values, this.dtype, this.shape);
-        }
-    }
-    NDArray.ones = function (shape, dtype) {
-        var values = makeOnesTypedArray(util.sizeFromShape(shape), dtype);
-        return NDArray.make(shape, { values: values }, dtype);
-    };
-    NDArray.zeros = function (shape, dtype) {
-        var values = makeZerosTypedArray(util.sizeFromShape(shape), dtype);
-        return NDArray.make(shape, { values: values }, dtype);
-    };
-    NDArray.onesLike = function (another) {
-        return NDArray.ones(another.shape, another.dtype);
-    };
-    NDArray.zerosLike = function (another) {
-        return NDArray.zeros(another.shape, another.dtype);
-    };
-    NDArray.like = function (another) {
-        var newValues = copyTypedArray(another.getValues(), another.dtype);
-        return NDArray.make(another.shape, { values: newValues }, another.dtype, another.math);
-    };
-    NDArray.make = function (shape, data, dtype, math) {
-        switch (shape.length) {
-            case 0:
-                return new Scalar(shape, dtype, data.values, data.id, math);
-            case 1:
-                return new Array1D(shape, dtype, data.values, data.id, math);
-            case 2:
-                return new Array2D(shape, dtype, data.values, data.id, math);
-            case 3:
-                return new Array3D(shape, dtype, data.values, data.id, math);
-            case 4:
-                return new Array4D(shape, dtype, data.values, data.id, math);
-            default:
-                return new NDArray(shape, dtype, data.values, data.id, math);
-        }
-    };
-    NDArray.fromPixels = function (pixels, numChannels, math) {
-        if (numChannels === void 0) { numChannels = 3; }
-        if (numChannels > 4) {
-            throw new Error('Cannot construct NDArray with more than 4 channels from pixels.');
-        }
-        var ndarrayData = {};
-        var shape = [pixels.height, pixels.width, numChannels];
-        math = math || environment_1.ENV.math;
-        var res = NDArray.make(shape, ndarrayData, 'int32', math);
-        math.writePixels(res.id, pixels, numChannels);
         return res;
     };
-    NDArray.prototype.reshape = function (newShape) {
-        this.throwIfDisposed();
-        newShape = util.inferFromImplicitShape(newShape, this.size);
-        if (util.arraysEqual(this.shape, newShape)) {
-            return this;
-        }
-        var data = { id: this.id };
-        util.assert(this.size === util.sizeFromShape(newShape), 'new shape and old shape must have the same number of elements.');
-        return NDArray.make(newShape, data, this.dtype, this.math);
-    };
-    NDArray.prototype.flatten = function () {
-        this.throwIfDisposed();
-        if (this instanceof Array1D) {
-            return this;
-        }
-        return this.as1D();
-    };
-    NDArray.prototype.asScalar = function () {
-        this.throwIfDisposed();
-        util.assert(this.size === 1, 'The array must have only 1 element.');
-        return this.reshape([]);
-    };
-    NDArray.prototype.as1D = function () {
-        this.throwIfDisposed();
-        return this.reshape([this.size]);
-    };
-    NDArray.prototype.as2D = function (rows, columns) {
-        this.throwIfDisposed();
-        return this.reshape([rows, columns]);
-    };
-    NDArray.prototype.as3D = function (rows, columns, depth) {
-        this.throwIfDisposed();
-        return this.reshape([rows, columns, depth]);
-    };
-    NDArray.prototype.as4D = function (rows, columns, depth, depth2) {
-        this.throwIfDisposed();
-        return this.reshape([rows, columns, depth, depth2]);
-    };
-    NDArray.prototype.asType = function (dtype) {
-        this.throwIfDisposed();
-        if (this.dtype === dtype) {
-            return this;
-        }
-        var vals = this.dataSync();
-        var newVals = toTypedArray(vals, dtype);
-        return NDArray.make(this.shape, { values: newVals }, dtype, this.math);
-    };
-    Object.defineProperty(NDArray.prototype, "rank", {
-        get: function () {
-            return this.shape.length;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    NDArray.prototype.get = function () {
-        var locs = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            locs[_i] = arguments[_i];
-        }
-        var index = locs[locs.length - 1];
-        for (var i = 0; i < locs.length - 1; ++i) {
-            index += this.strides[i] * locs[i];
-        }
-        return this.dataSync()[index];
-    };
-    NDArray.prototype.add = function (value) {
-        var locs = [];
-        for (var _i = 1; _i < arguments.length; _i++) {
-            locs[_i - 1] = arguments[_i];
-        }
-        this.set.apply(this, [this.get.apply(this, locs) + value].concat(locs));
-    };
-    NDArray.prototype.set = function (value) {
-        var locs = [];
-        for (var _i = 1; _i < arguments.length; _i++) {
-            locs[_i - 1] = arguments[_i];
-        }
-        this.throwIfDisposed();
-        util.assert(locs.length === this.rank, "The number of provided coordinates (" + locs.length + ") must " +
-            ("match the rank (" + this.rank + ")"));
-        var index = locs.length > 0 ? locs[locs.length - 1] : 0;
-        for (var i = 0; i < locs.length - 1; ++i) {
-            index += this.strides[i] * locs[i];
-        }
-        var vals = this.dataSync();
-        vals[index] = value;
-        this.math.write(this.id, vals, this.dtype, this.shape);
-    };
-    NDArray.prototype.val = function () {
-        var locs = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            locs[_i] = arguments[_i];
-        }
-        return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        this.throwIfDisposed();
-                        return [4, this.data()];
-                    case 1:
-                        _a.sent();
-                        return [2, this.get.apply(this, locs)];
-                }
-            });
-        });
-    };
-    NDArray.prototype.locToIndex = function (locs) {
-        this.throwIfDisposed();
-        var index = locs[locs.length - 1];
-        for (var i = 0; i < locs.length - 1; ++i) {
-            index += this.strides[i] * locs[i];
-        }
-        return index;
-    };
-    NDArray.prototype.indexToLoc = function (index) {
-        this.throwIfDisposed();
-        var locs = new Array(this.shape.length);
-        for (var i = 0; i < locs.length - 1; ++i) {
-            locs[i] = Math.floor(index / this.strides[i]);
-            index -= locs[i] * this.strides[i];
-        }
-        locs[locs.length - 1] = index;
-        return locs;
-    };
-    NDArray.prototype.fill = function (value) {
-        this.throwIfDisposed();
-        var vals = this.dataSync();
-        vals.fill(value);
-        this.math.write(this.id, vals, this.dtype, this.shape);
-    };
-    NDArray.prototype.getValues = function () {
-        return this.dataSync();
-    };
-    NDArray.prototype.getValuesAsync = function () {
-        return this.data();
-    };
-    NDArray.prototype.data = function () {
-        return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
-                this.throwIfDisposed();
-                return [2, this.math.read(this.id)];
-            });
-        });
-    };
-    NDArray.prototype.dataSync = function () {
-        this.throwIfDisposed();
-        return this.math.readSync(this.id);
-    };
-    NDArray.prototype.dispose = function () {
-        this.isDisposed = true;
-        this.math.disposeData(this.id);
-    };
-    NDArray.prototype.equals = function (t) {
-        this.throwIfDisposed();
-        return this.dtype === t.dtype && util.arraysEqual(this.shape, t.shape) &&
-            util.arraysEqual(this.dataSync(), t.dataSync());
-    };
-    NDArray.rand = function (shape, randFunction, dtype) {
-        var size = util.sizeFromShape(shape);
-        var values = null;
-        if (dtype == null || dtype === 'float32') {
-            values = new Float32Array(size);
-        }
-        else if (dtype === 'int32') {
-            values = new Int32Array(size);
-        }
-        else if (dtype === 'bool') {
-            values = new Uint8Array(size);
-        }
-        else {
-            throw new Error("Unknown data type " + dtype);
-        }
-        for (var i = 0; i < size; i++) {
-            values[i] = randFunction();
-        }
-        return NDArray.make(shape, { values: values }, dtype);
-    };
-    NDArray.randNormal = function (shape, mean, stdDev, dtype, seed) {
-        if (mean === void 0) { mean = 0; }
-        if (stdDev === void 0) { stdDev = 1; }
-        if (dtype != null && dtype === 'bool') {
-            throw new Error("Unsupported data type " + dtype);
-        }
-        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, false, seed);
-        return NDArray.rand(shape, function () { return randGauss.nextValue(); }, dtype);
-    };
-    NDArray.randTruncatedNormal = function (shape, mean, stdDev, dtype, seed) {
-        if (mean === void 0) { mean = 0; }
-        if (stdDev === void 0) { stdDev = 1; }
-        if (dtype != null && dtype === 'bool') {
-            throw new Error("Unsupported data type " + dtype);
-        }
-        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, true, seed);
-        return NDArray.rand(shape, function () { return randGauss.nextValue(); }, dtype);
-    };
-    NDArray.randUniform = function (shape, a, b, dtype) {
-        return NDArray.rand(shape, function () { return util.randUniform(a, b); }, dtype);
-    };
-    NDArray.prototype.throwIfDisposed = function () {
-        if (this.isDisposed) {
-            throw new Error("NDArray is disposed.");
-        }
-    };
-    NDArray.nextId = 0;
-    return NDArray;
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Convolution' }),
+        operation_1.operation
+    ], Ops, "maxPool", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "maxPoolBackprop", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Convolution' }),
+        operation_1.operation
+    ], Ops, "minPool", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Convolution' }),
+        operation_1.operation
+    ], Ops, "avgPool", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "avgPoolBackprop", null);
+    return Ops;
 }());
-exports.NDArray = NDArray;
-var Scalar = (function (_super) {
-    __extends(Scalar, _super);
-    function Scalar() {
-        return _super !== null && _super.apply(this, arguments) || this;
-    }
-    Scalar.new = function (value, dtype) {
-        var values = [value];
-        return new Scalar([], dtype, toTypedArray(values, dtype));
-    };
-    Scalar.prototype.get = function () {
-        return this.dataSync()[0];
-    };
-    Scalar.prototype.val = function () {
-        return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0: return [4, this.data()];
-                    case 1:
-                        _a.sent();
-                        return [2, this.get()];
-                }
-            });
-        });
-    };
-    Scalar.prototype.add = function (value) {
-        this.dataSync()[0] += value;
-    };
-    Scalar.prototype.asType = function (dtype) {
-        return _super.prototype.asType.call(this, dtype);
-    };
-    Scalar.prototype.locToIndex = function (loc) {
-        return 0;
-    };
-    Scalar.prototype.indexToLoc = function (index) {
-        return [];
-    };
-    return Scalar;
-}(NDArray));
-exports.Scalar = Scalar;
-var Array1D = (function (_super) {
-    __extends(Array1D, _super);
-    function Array1D() {
-        return _super !== null && _super.apply(this, arguments) || this;
-    }
-    Array1D.new = function (values, dtype) {
-        if (!instanceofTypedArray(values)) {
-            var inferredShape = util.inferShape(values);
-            util.assert(inferredShape.length === 1, "Error constructing Array1D. Shape of values " + inferredShape + " is " +
-                "not 1 dimensional.");
-        }
-        return new Array1D([values.length], dtype, toTypedArray(values, dtype));
-    };
-    Array1D.prototype.get = function (i) {
-        return this.dataSync()[i];
-    };
-    Array1D.prototype.val = function (i) {
-        return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0: return [4, this.data()];
-                    case 1:
-                        _a.sent();
-                        return [2, this.get(i)];
-                }
-            });
-        });
-    };
-    Array1D.prototype.add = function (value, i) {
-        this.dataSync()[i] += value;
-    };
-    Array1D.prototype.locToIndex = function (loc) {
-        return loc[0];
-    };
-    Array1D.prototype.indexToLoc = function (index) {
-        return [index];
-    };
-    Array1D.prototype.asType = function (dtype) {
-        return _super.prototype.asType.call(this, dtype);
-    };
-    Array1D.ones = function (shape, dtype) {
-        return NDArray.ones(shape, dtype);
-    };
-    Array1D.zeros = function (shape, dtype) {
-        return NDArray.zeros(shape, dtype);
-    };
-    Array1D.randNormal = function (shape, mean, stdDev, dtype, seed) {
-        if (mean === void 0) { mean = 0; }
-        if (stdDev === void 0) { stdDev = 1; }
-        if (dtype != null && dtype === 'bool') {
-            throw new Error("Unsupported data type " + dtype);
-        }
-        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, false, seed);
-        return NDArray.rand(shape, function () { return randGauss.nextValue(); }, dtype);
-    };
-    Array1D.randTruncatedNormal = function (shape, mean, stdDev, dtype, seed) {
-        if (mean === void 0) { mean = 0; }
-        if (stdDev === void 0) { stdDev = 1; }
-        if (dtype != null && dtype === 'bool') {
-            throw new Error("Unsupported data type " + dtype);
-        }
-        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, true, seed);
-        return NDArray.rand(shape, function () { return randGauss.nextValue(); }, dtype);
-    };
-    Array1D.randUniform = function (shape, a, b, dtype) {
-        return NDArray.rand(shape, function () { return util.randUniform(a, b); }, dtype);
-    };
-    return Array1D;
-}(NDArray));
-exports.Array1D = Array1D;
-var Array2D = (function (_super) {
-    __extends(Array2D, _super);
-    function Array2D(shape, dtype, values, id, math) {
-        var _this = this;
-        util.assert(shape.length === 2, 'Shape should be of length 2');
-        _this = _super.call(this, shape, dtype, values, id, math) || this;
-        _this.stride0 = _this.strides[0];
-        return _this;
-    }
-    Array2D.new = function (shape, values, dtype) {
-        if (!instanceofTypedArray(values)) {
-            var inferredShape = util.inferShape(values);
-            if (inferredShape.length > 1) {
-                util.assertShapesMatch(shape, inferredShape, "Error when constructing Array2D. Shape of values " +
-                    (inferredShape + " does not match the provided shape ") +
-                    (shape + ". "));
-            }
-        }
-        return new Array2D(shape, dtype, toTypedArray(values, dtype));
-    };
-    Array2D.prototype.get = function (i, j) {
-        return this.dataSync()[this.stride0 * i + j];
-    };
-    Array2D.prototype.add = function (value, i, j) {
-        this.dataSync()[this.stride0 * i + j] += value;
-    };
-    Array2D.prototype.val = function (i, j) {
-        return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0: return [4, this.data()];
-                    case 1:
-                        _a.sent();
-                        return [2, this.get(i, j)];
-                }
-            });
-        });
-    };
-    Array2D.prototype.locToIndex = function (locs) {
-        return this.stride0 * locs[0] + locs[1];
-    };
-    Array2D.prototype.indexToLoc = function (index) {
-        return [Math.floor(index / this.stride0), index % this.stride0];
-    };
-    Array2D.prototype.asType = function (dtype) {
-        return _super.prototype.asType.call(this, dtype);
-    };
-    Array2D.ones = function (shape, dtype) {
-        return NDArray.ones(shape, dtype);
-    };
-    Array2D.zeros = function (shape, dtype) {
-        return NDArray.zeros(shape, dtype);
-    };
-    Array2D.randNormal = function (shape, mean, stdDev, dtype, seed) {
-        if (mean === void 0) { mean = 0; }
-        if (stdDev === void 0) { stdDev = 1; }
-        if (dtype != null && dtype === 'bool') {
-            throw new Error("Unsupported data type " + dtype);
-        }
-        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, false, seed);
-        return NDArray.rand(shape, function () { return randGauss.nextValue(); }, dtype);
-    };
-    Array2D.randTruncatedNormal = function (shape, mean, stdDev, dtype, seed) {
-        if (mean === void 0) { mean = 0; }
-        if (stdDev === void 0) { stdDev = 1; }
-        if (dtype != null && dtype === 'bool') {
-            throw new Error("Unsupported data type " + dtype);
-        }
-        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, true, seed);
-        return NDArray.rand(shape, function () { return randGauss.nextValue(); }, dtype);
-    };
-    Array2D.randUniform = function (shape, a, b, dtype) {
-        return NDArray.rand(shape, function () { return util.randUniform(a, b); }, dtype);
-    };
-    return Array2D;
-}(NDArray));
-exports.Array2D = Array2D;
-var Array3D = (function (_super) {
-    __extends(Array3D, _super);
-    function Array3D(shape, dtype, values, id, math) {
-        var _this = this;
-        util.assert(shape.length === 3, 'Shape should be of length 3');
-        _this = _super.call(this, shape, dtype, values, id, math) || this;
-        _this.stride0 = _this.strides[0];
-        _this.stride1 = _this.strides[1];
-        return _this;
-    }
-    Array3D.new = function (shape, values, dtype) {
-        if (!instanceofTypedArray(values)) {
-            var inferredShape = util.inferShape(values);
-            if (inferredShape.length > 1) {
-                util.assertShapesMatch(shape, inferredShape, "Error when constructing Array3D. Shape of values " +
-                    (inferredShape + " does not match the provided shape ") +
-                    (shape + ". "));
-            }
-        }
-        return new Array3D(shape, dtype, toTypedArray(values, dtype));
-    };
-    Array3D.prototype.get = function (i, j, k) {
-        return this.dataSync()[this.stride0 * i + this.stride1 * j + k];
-    };
-    Array3D.prototype.val = function (i, j, k) {
-        return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0: return [4, this.data()];
-                    case 1:
-                        _a.sent();
-                        return [2, this.get(i, j, k)];
-                }
-            });
-        });
-    };
-    Array3D.prototype.add = function (value, i, j, k) {
-        this.dataSync()[this.stride0 * i + this.stride1 * j + k] += value;
-    };
-    Array3D.prototype.locToIndex = function (locs) {
-        return this.stride0 * locs[0] + this.stride1 * locs[1] + locs[2];
-    };
-    Array3D.prototype.indexToLoc = function (index) {
-        var i = Math.floor(index / this.stride0);
-        index -= i * this.stride0;
-        return [i, Math.floor(index / this.stride1), index % this.stride1];
-    };
-    Array3D.ones = function (shape, dtype) {
-        return NDArray.ones(shape, dtype);
-    };
-    Array3D.prototype.asType = function (dtype) {
-        return _super.prototype.asType.call(this, dtype);
-    };
-    Array3D.zeros = function (shape, dtype) {
-        return NDArray.zeros(shape, dtype);
-    };
-    Array3D.randNormal = function (shape, mean, stdDev, dtype, seed) {
-        if (mean === void 0) { mean = 0; }
-        if (stdDev === void 0) { stdDev = 1; }
-        if (dtype != null && dtype === 'bool') {
-            throw new Error("Unsupported data type " + dtype);
-        }
-        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, false, seed);
-        return NDArray.rand(shape, function () { return randGauss.nextValue(); }, dtype);
-    };
-    Array3D.randTruncatedNormal = function (shape, mean, stdDev, dtype, seed) {
-        if (mean === void 0) { mean = 0; }
-        if (stdDev === void 0) { stdDev = 1; }
-        if (dtype != null && dtype === 'bool') {
-            throw new Error("Unsupported data type " + dtype);
-        }
-        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, true, seed);
-        return NDArray.rand(shape, function () { return randGauss.nextValue(); }, dtype);
-    };
-    Array3D.randUniform = function (shape, a, b, dtype) {
-        return NDArray.rand(shape, function () { return util.randUniform(a, b); }, dtype);
-    };
-    return Array3D;
-}(NDArray));
-exports.Array3D = Array3D;
-var Array4D = (function (_super) {
-    __extends(Array4D, _super);
-    function Array4D(shape, dtype, values, id, math) {
-        var _this = this;
-        util.assert(shape.length === 4, 'Shape should be of length 4');
-        _this = _super.call(this, shape, dtype, values, id, math) || this;
-        _this.stride0 = _this.strides[0];
-        _this.stride1 = _this.strides[1];
-        _this.stride2 = _this.strides[2];
-        return _this;
-    }
-    Array4D.new = function (shape, values, dtype) {
-        if (!instanceofTypedArray(values)) {
-            var inferredShape = util.inferShape(values);
-            if (inferredShape.length > 1) {
-                util.assertShapesMatch(shape, inferredShape, "Error when constructing Array4D. Shape of values " +
-                    (inferredShape + " does not match the provided shape ") +
-                    (shape + ". "));
-            }
-        }
-        return new Array4D(shape, dtype, toTypedArray(values, dtype));
-    };
-    Array4D.prototype.get = function (i, j, k, l) {
-        return this
-            .dataSync()[this.stride0 * i + this.stride1 * j + this.stride2 * k + l];
-    };
-    Array4D.prototype.val = function (i, j, k, l) {
-        return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0: return [4, this.data()];
-                    case 1:
-                        _a.sent();
-                        return [2, this.get(i, j, k, l)];
-                }
-            });
-        });
-    };
-    Array4D.prototype.add = function (value, i, j, k, l) {
-        this.dataSync()[this.stride0 * i + this.stride1 * j + this.stride2 * k + l] += value;
-    };
-    Array4D.prototype.locToIndex = function (locs) {
-        return this.stride0 * locs[0] + this.stride1 * locs[1] +
-            this.stride2 * locs[2] + locs[3];
-    };
-    Array4D.prototype.indexToLoc = function (index) {
-        var i = Math.floor(index / this.stride0);
-        index -= i * this.stride0;
-        var j = Math.floor(index / this.stride1);
-        index -= j * this.stride1;
-        return [i, j, Math.floor(index / this.stride2), index % this.stride2];
-    };
-    Array4D.prototype.asType = function (dtype) {
-        return _super.prototype.asType.call(this, dtype);
-    };
-    Array4D.ones = function (shape, dtype) {
-        return NDArray.ones(shape, dtype);
-    };
-    Array4D.zeros = function (shape, dtype) {
-        return NDArray.zeros(shape, dtype);
-    };
-    Array4D.randNormal = function (shape, mean, stdDev, dtype, seed) {
-        if (mean === void 0) { mean = 0; }
-        if (stdDev === void 0) { stdDev = 1; }
-        if (dtype != null && dtype === 'bool') {
-            throw new Error("Unsupported data type " + dtype);
-        }
-        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, false, seed);
-        return NDArray.rand(shape, function () { return randGauss.nextValue(); }, dtype);
-    };
-    Array4D.randTruncatedNormal = function (shape, mean, stdDev, dtype, seed) {
-        if (mean === void 0) { mean = 0; }
-        if (stdDev === void 0) { stdDev = 1; }
-        if (dtype != null && dtype === 'bool') {
-            throw new Error("Unsupported data type " + dtype);
-        }
-        var randGauss = new rand_1.MPRandGauss(mean, stdDev, dtype, true, seed);
-        return NDArray.rand(shape, function () { return randGauss.nextValue(); }, dtype);
-    };
-    Array4D.randUniform = function (shape, a, b, dtype) {
-        return NDArray.rand(shape, function () { return util.randUniform(a, b); }, dtype);
-    };
-    return Array4D;
-}(NDArray));
-exports.Array4D = Array4D;
-function copyTypedArray(array, dtype) {
-    if (dtype == null || dtype === 'float32') {
-        return new Float32Array(array);
-    }
-    else if (dtype === 'int32') {
-        var vals = new Int32Array(array.length);
-        for (var i = 0; i < vals.length; ++i) {
-            var val = array[i];
-            if (util.isValNaN(val, 'int32')) {
-                vals[i] = util.getNaN('int32');
-            }
-            else {
-                vals[i] = val;
-            }
-        }
-        return vals;
-    }
-    else if (dtype === 'bool') {
-        var bool = new Uint8Array(array.length);
-        for (var i = 0; i < bool.length; ++i) {
-            var val = array[i];
-            if (util.isValNaN(val, 'bool')) {
-                bool[i] = util.getNaN('bool');
-            }
-            else if (Math.round(val) !== 0) {
-                bool[i] = 1;
-            }
-        }
-        return bool;
-    }
-    else {
-        throw new Error("Unknown data type " + dtype);
-    }
-}
-function instanceofTypedArray(a) {
-    return a instanceof Float32Array || a instanceof Int32Array ||
-        a instanceof Uint8Array;
-}
-function noConversionNeeded(a, dtype) {
-    return (a instanceof Float32Array && dtype === 'float32') ||
-        (a instanceof Int32Array && dtype === 'int32') ||
-        (a instanceof Uint8Array && dtype === 'bool');
-}
-function toTypedArray(a, dtype) {
-    if (noConversionNeeded(a, dtype)) {
-        return a;
-    }
-    if (Array.isArray(a)) {
-        a = util.flatten(a);
-    }
-    return copyTypedArray(a, dtype);
-}
-function makeZerosTypedArray(size, dtype) {
-    if (dtype == null || dtype === 'float32') {
-        return new Float32Array(size);
-    }
-    else if (dtype === 'int32') {
-        return new Int32Array(size);
-    }
-    else if (dtype === 'bool') {
-        return new Uint8Array(size);
-    }
-    else {
-        throw new Error("Unknown data type " + dtype);
-    }
-}
-function makeOnesTypedArray(size, dtype) {
-    var array = makeZerosTypedArray(size, dtype);
-    for (var i = 0; i < array.length; i++) {
-        array[i] = 1;
-    }
-    return array;
-}
+exports.Ops = Ops;
 
-},{"../environment":15,"../util":100,"./rand":95}],95:[function(require,module,exports){
+},{"../doc":32,"../environment":34,"../util":151,"./conv_util":115,"./operation":122}],125:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var seedrandom = require("seedrandom");
@@ -13321,7 +16108,7 @@ var MPRandGauss = (function () {
 }());
 exports.MPRandGauss = MPRandGauss;
 
-},{"seedrandom":102}],96:[function(require,module,exports){
+},{"seedrandom":153}],126:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PARALLELIZE_THRESHOLD = 30;
@@ -13341,7 +16128,345 @@ function nearestDivisor(size, start) {
     return size;
 }
 
-},{}],97:[function(require,module,exports){
+},{}],127:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var globals_1 = require("../globals");
+var tensor_1 = require("../tensor");
+var util = require("../util");
+var axis_util = require("./axis_util");
+var operation_1 = require("./operation");
+var ops = require("./ops");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.logSumExp = function (input, axis, keepDims) {
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        var axes = axis_util.parseAxisParam(axis, input.shape);
+        var xMax = input.max(axes, true);
+        var a = input.sub(xMax);
+        var b = a.exp();
+        var c = b.sum(axes);
+        var d = c.log();
+        var res = xMax.reshape(d.shape).add(d);
+        if (keepDims) {
+            var newShape = axis_util.expandShapeToKeepDim(res.shape, axes);
+            return res.reshape(newShape);
+        }
+        return res;
+    };
+    Ops.sum = function (x, axis, keepDims) {
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        var axes = axis_util.parseAxisParam(axis, x.shape);
+        var customOp = globals_1.customGrad(function (x) {
+            var permutation = axis_util.getAxesPermutation(axes, x.rank);
+            var reductionAxes = axes;
+            var permutedX = x;
+            if (permutation != null) {
+                permutedX = x.transpose(permutation);
+                reductionAxes =
+                    axis_util.getInnerMostAxes(reductionAxes.length, x.rank);
+            }
+            var value = environment_1.ENV.engine.executeKernel('Sum', { inputs: { x: permutedX }, args: { axes: reductionAxes } });
+            if (keepDims) {
+                var newShape = axis_util.expandShapeToKeepDim(value.shape, axes);
+                value = value.reshape(newShape);
+            }
+            var gradFunc = function (dy) {
+                var expandedDyShape = x.shape.slice();
+                axes.forEach(function (axis) {
+                    expandedDyShape[axis] = 1;
+                });
+                var expandedDy = dy.reshape(expandedDyShape);
+                var derX = expandedDy.mul(tensor_1.Tensor.ones(x.shape, 'float32'));
+                return derX;
+            };
+            return { value: value, gradFunc: gradFunc };
+        });
+        return customOp(x);
+    };
+    Ops.mean = function (x, axis, keepDims) {
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        var axes = axis_util.parseAxisParam(axis, x.shape);
+        var shapes = axis_util.computeOutAndReduceShapes(x.shape, axes);
+        var reduceShape = shapes[1];
+        var reduceSize = util.sizeFromShape(reduceShape);
+        var customOp = globals_1.customGrad(function (x) {
+            var reduceSizeScalar = ops.scalar(reduceSize);
+            var res = x.div(reduceSizeScalar);
+            var value = res.sum(axis, keepDims);
+            var gradFunc = function (dy) {
+                var expandedDyShape = x.shape.slice();
+                axes.forEach(function (axis) {
+                    expandedDyShape[axis] = 1;
+                });
+                var expandedDy = dy.reshape(expandedDyShape);
+                var derX = expandedDy.mul(tensor_1.Tensor.ones(x.shape, 'float32'))
+                    .div(reduceSizeScalar);
+                return derX;
+            };
+            return { value: value, gradFunc: gradFunc };
+        });
+        return customOp(x);
+    };
+    Ops.min = function (x, axis, keepDims) {
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        var origAxes = axis_util.parseAxisParam(axis, x.shape);
+        var axes = origAxes;
+        var permutedAxes = axis_util.getAxesPermutation(axes, x.rank);
+        if (permutedAxes != null) {
+            x = x.transpose(permutedAxes);
+            axes = axis_util.getInnerMostAxes(axes.length, x.rank);
+        }
+        var res = environment_1.ENV.engine.executeKernel('Min', { inputs: { x: x }, args: { axes: axes } });
+        if (keepDims) {
+            var newShape = axis_util.expandShapeToKeepDim(res.shape, origAxes);
+            return res.reshape(newShape);
+        }
+        return res;
+    };
+    Ops.max = function (x, axis, keepDims) {
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        var origAxes = axis_util.parseAxisParam(axis, x.shape);
+        var axes = origAxes;
+        var permutedAxes = axis_util.getAxesPermutation(axes, x.rank);
+        if (permutedAxes != null) {
+            x = x.transpose(permutedAxes);
+            axes = axis_util.getInnerMostAxes(axes.length, x.rank);
+        }
+        var res = environment_1.ENV.engine.executeKernel('Max', { inputs: { x: x }, args: { axes: axes } });
+        if (keepDims) {
+            var newShape = axis_util.expandShapeToKeepDim(res.shape, origAxes);
+            return res.reshape(newShape);
+        }
+        return res;
+    };
+    Ops.argMin = function (x, axis) {
+        if (axis === void 0) { axis = null; }
+        var axes = axis_util.parseAxisParam(axis, x.shape);
+        var permutedAxes = axis_util.getAxesPermutation(axes, x.rank);
+        if (permutedAxes != null) {
+            x = x.transpose(permutedAxes);
+            axes = axis_util.getInnerMostAxes(axes.length, x.rank);
+        }
+        return environment_1.ENV.engine.executeKernel('ArgMin', { inputs: { x: x }, args: { axes: axes } });
+    };
+    Ops.argMax = function (x, axis) {
+        if (axis === void 0) { axis = null; }
+        var axes = axis_util.parseAxisParam(axis, x.shape);
+        var permutedAxes = axis_util.getAxesPermutation(axes, x.rank);
+        if (permutedAxes != null) {
+            x = x.transpose(permutedAxes);
+            axes = axis_util.getInnerMostAxes(axes.length, x.rank);
+        }
+        return environment_1.ENV.engine.executeKernel('ArgMax', { inputs: { x: x }, args: { axes: axes } });
+    };
+    Ops.moments = function (x, axis, keepDims) {
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        var axes = axis_util.parseAxisParam(axis, x.shape);
+        var mean = x.mean(axes, keepDims);
+        var keepDimsShape = mean.shape;
+        if (!keepDims) {
+            keepDimsShape = axis_util.expandShapeToKeepDim(mean.shape, axes);
+        }
+        var devSquared = x.toFloat().sub(mean.reshape(keepDimsShape)).square();
+        var variance = devSquared.mean(axes, keepDims);
+        return { mean: mean, variance: variance };
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Reduction' }),
+        operation_1.operation
+    ], Ops, "logSumExp", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Reduction' }),
+        operation_1.operation
+    ], Ops, "sum", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Reduction' }),
+        operation_1.operation
+    ], Ops, "mean", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Reduction' }),
+        operation_1.operation
+    ], Ops, "min", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Reduction' }),
+        operation_1.operation
+    ], Ops, "max", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Reduction' }),
+        operation_1.operation
+    ], Ops, "argMin", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Reduction' }),
+        operation_1.operation
+    ], Ops, "argMax", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Normalization' }),
+        operation_1.operation
+    ], Ops, "moments", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+
+},{"../doc":32,"../environment":34,"../globals":35,"../tensor":146,"../util":151,"./axis_util":107,"./operation":122,"./ops":123}],128:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var util = require("../util");
+var axis_util = require("./axis_util");
+var operation_1 = require("./operation");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.reverse1d = function (x) {
+        util.assert(x.rank === 1, "Error in reverse1D: x must be rank 1 but got\n             rank " + x.rank + ".");
+        return Ops.reverse(x, 0);
+    };
+    Ops.reverse2d = function (x, axis) {
+        util.assert(x.rank === 2, "Error in reverse2D: x must be rank 2 but got\n             rank " + x.rank + ".");
+        return Ops.reverse(x, axis);
+    };
+    Ops.reverse3d = function (x, axis) {
+        util.assert(x.rank === 3, "Error in reverse3D: x must be rank 3 but got\n             rank " + x.rank + ".");
+        return Ops.reverse(x, axis);
+    };
+    Ops.reverse4d = function (x, axis) {
+        util.assert(x.rank === 4, "Error in reverse4D: x must be rank 4 but got\n             rank " + x.rank + ".");
+        return Ops.reverse(x, axis);
+    };
+    Ops.reverse = function (x, axis) {
+        var x4d;
+        var axisCleaned = axis_util.parseAxisParam(axis, x.shape).map(function (a) { return a + 4 - x.rank; });
+        if (x.rank === 0) {
+            return x.clone();
+        }
+        else if (x.rank === 1) {
+            x4d = x.as4D(1, 1, 1, x.shape[0]);
+        }
+        else if (x.rank === 2) {
+            x4d = x.as4D(1, 1, x.shape[0], x.shape[1]);
+        }
+        else if (x.rank === 3) {
+            x4d = x.as4D(1, x.shape[0], x.shape[1], x.shape[2]);
+        }
+        else if (x.rank === 4) {
+            x4d = x;
+        }
+        else {
+            throw new Error("Reverse for rank " + x.rank + " is not yet implemented");
+        }
+        var res = environment_1.ENV.engine.executeKernel('Reverse4D', { inputs: { x: x4d }, args: { axis: axisCleaned } });
+        return res.reshapeAs(x);
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Slicing and Joining' }),
+        operation_1.operation
+    ], Ops, "reverse", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+
+},{"../doc":32,"../environment":34,"../util":151,"./axis_util":107,"./operation":122}],129:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SELU_SCALEALPHA = 1.7580993408473768599402175208123;
+exports.SELU_SCALE = 1.0507009873554804934193349852946;
+
+},{}],130:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var operation_1 = require("./operation");
+var slice_util = require("./slice_util");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.slice1d = function (x, begin, size) {
+        slice_util.assertParamsValid(x, [begin], [size]);
+        return environment_1.ENV.engine.executeKernel('Slice1D', { inputs: { x: x }, args: { begin: begin, size: size } });
+    };
+    Ops.slice2d = function (x, begin, size) {
+        slice_util.assertParamsValid(x, begin, size);
+        return environment_1.ENV.engine.executeKernel('Slice2D', { inputs: { x: x }, args: { begin: begin, size: size } });
+    };
+    Ops.slice3d = function (x, begin, size) {
+        slice_util.assertParamsValid(x, begin, size);
+        return environment_1.ENV.engine.executeKernel('Slice3D', { inputs: { x: x }, args: { begin: begin, size: size } });
+    };
+    Ops.slice4d = function (x, begin, size) {
+        slice_util.assertParamsValid(x, begin, size);
+        return environment_1.ENV.engine.executeKernel('Slice4D', { inputs: { x: x }, args: { begin: begin, size: size } });
+    };
+    Ops.slice = function (x, begin, size) {
+        if (x.rank === 0) {
+            throw new Error('Slicing scalar is not possible');
+        }
+        else if (x.rank === 1) {
+            return Ops.slice1d(x, begin[0], size[0]);
+        }
+        else if (x.rank === 2) {
+            return Ops.slice2d(x, begin, size);
+        }
+        else if (x.rank === 3) {
+            return Ops.slice3d(x, begin, size);
+        }
+        else if (x.rank === 4) {
+            return Ops.slice4d(x, begin, size);
+        }
+        else {
+            throw new Error("Slicing for rank " + x.rank + " not implemented yet");
+        }
+    };
+    __decorate([
+        operation_1.operation
+    ], Ops, "slice1d", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "slice2d", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "slice3d", null);
+    __decorate([
+        operation_1.operation
+    ], Ops, "slice4d", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Slicing and Joining' }),
+        operation_1.operation
+    ], Ops, "slice", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+
+},{"../doc":32,"../environment":34,"./operation":122,"./slice_util":131}],131:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var util = require("../util");
@@ -13357,131 +16482,2660 @@ function assertParamsValid(input, begin, size) {
 }
 exports.assertParamsValid = assertParamsValid;
 
-},{"../util":100}],98:[function(require,module,exports){
+},{"../util":151}],132:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var globals_1 = require("../globals");
+var util = require("../util");
+var axis_util = require("./axis_util");
+var operation_1 = require("./operation");
+var ops = require("./ops");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.softmax = function (logits, dim) {
+        if (dim === void 0) { dim = -1; }
+        if (dim === -1) {
+            dim = logits.rank - 1;
+        }
+        if (dim !== logits.rank - 1) {
+            throw Error('Softmax along a non-last dimension is not yet supported. ' +
+                ("Logits was rank " + logits.rank + " and dim was " + dim));
+        }
+        var customOp = globals_1.customGrad(function (logits) {
+            var keepDims = true;
+            var lse = logits.logSumExp([dim], keepDims);
+            var logResult = logits.toFloat().sub(lse);
+            var y = logResult.exp();
+            var gradFunc = function (dy) {
+                var dyTimesY = dy.mul(y);
+                var keepDims = true;
+                return dyTimesY.sub(dyTimesY.sum([dim], keepDims).mul(y));
+            };
+            return { value: y, gradFunc: gradFunc };
+        });
+        return customOp(logits);
+    };
+    Ops.softmaxCrossEntropy = function (labels, logits, dim) {
+        if (dim === void 0) { dim = -1; }
+        util.assertShapesMatch(labels.shape, logits.shape, 'Error in softmaxCrossEntropy: ');
+        if (dim === -1) {
+            dim = logits.rank - 1;
+        }
+        if (dim !== logits.rank - 1) {
+            throw Error("Softmax cross entropy along a non-last dimension is not yet " +
+                ("supported. Labels / logits was rank " + logits.rank + " ") +
+                ("and dim was " + dim));
+        }
+        var customOp = globals_1.customGrad(function (labels, logits) {
+            var predictedProbs = logits.softmax(dim);
+            var costVector = ops.scalar(1e-5).add(predictedProbs).log().mul(labels).neg();
+            var value = costVector.sum([dim]);
+            var gradFunc = function (dy) {
+                var dyShape = axis_util.expandShapeToKeepDim(dy.shape, [dim]);
+                return [
+                    dy.reshape(dyShape).mul(labels.toFloat().sub(predictedProbs)),
+                    dy.reshape(dyShape).mul(predictedProbs.sub(labels.toFloat())),
+                ];
+            };
+            return { value: value, gradFunc: gradFunc };
+        });
+        return customOp(labels, logits);
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Normalization' }),
+        operation_1.operation
+    ], Ops, "softmax", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Losses', namespace: 'losses' }),
+        operation_1.operation
+    ], Ops, "softmaxCrossEntropy", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+
+},{"../doc":32,"../globals":35,"../util":151,"./axis_util":107,"./operation":122,"./ops":123}],133:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var util = require("../util");
+var axis_util = require("./axis_util");
+var operation_1 = require("./operation");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.transpose = function (x, perm) {
+        if (perm == null) {
+            perm = x.shape.map(function (s, i) { return i; }).reverse();
+        }
+        var der = function (dy) {
+            var undoPerm = axis_util.getUndoAxesPermutation(perm);
+            var derX = function () { return dy.transpose(undoPerm); };
+            return { x: derX };
+        };
+        util.assert(x.rank === perm.length, "Error in transpose: rank of input " + x.rank + " " +
+            ("must match length of perm " + perm + "."));
+        return environment_1.ENV.engine.executeKernel('Transpose', { inputs: { x: x }, args: { perm: perm } }, der);
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Matrices' }),
+        operation_1.operation
+    ], Ops, "transpose", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+
+},{"../doc":32,"../environment":34,"../util":151,"./axis_util":107,"./operation":122}],134:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var environment_1 = require("../environment");
+var util = require("../util");
+var operation_1 = require("./operation");
+var ops = require("./ops");
+var ops_1 = require("./ops");
+var selu_util = require("./selu_util");
+var Ops = (function () {
+    function Ops() {
+    }
+    Ops.neg = function (x) {
+        return environment_1.ENV.engine.executeKernel('Neg', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return dy.neg(); } };
+        });
+    };
+    Ops.ceil = function (x) {
+        var gradient = function (dy, y) {
+            return { x: function () { return ops.zeros(y.shape); } };
+        };
+        return environment_1.ENV.engine.executeKernel('Ceil', { inputs: { x: x } }, gradient);
+    };
+    Ops.floor = function (x) {
+        var gradient = function (dy, y) {
+            return { x: function () { return ops.zeros(y.shape); } };
+        };
+        return environment_1.ENV.engine.executeKernel('Floor', { inputs: { x: x } }, gradient);
+    };
+    Ops.exp = function (x) {
+        return environment_1.ENV.engine.executeKernel('Exp', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return dy.mul(y); } };
+        });
+    };
+    Ops.log = function (x) {
+        return environment_1.ENV.engine.executeKernel('Log', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return dy.div(x.toFloat()); } };
+        });
+    };
+    Ops.sqrt = function (x) {
+        return environment_1.ENV.engine.executeKernel('Sqrt', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return dy.div(x.toFloat().sqrt().mul(ops.scalar(2))); } };
+        });
+    };
+    Ops.square = function (x) {
+        return environment_1.ENV.engine.executeKernel('Square', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return dy.mul(x.toFloat().mul(ops.scalar(2))); } };
+        });
+    };
+    Ops.abs = function (x) {
+        return environment_1.ENV.engine.executeKernel('Abs', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return dy.mul(x.toFloat().step(-1)); } };
+        });
+    };
+    Ops.clipByValue = function (x, clipValueMin, clipValueMax) {
+        util.assert((clipValueMin <= clipValueMax), "Error in clip: min (" + clipValueMin + ") must be" +
+            ("less than or equal to max (" + clipValueMax + ")."));
+        return environment_1.ENV.engine.executeKernel('Clip', { inputs: { x: x }, args: { min: clipValueMin, max: clipValueMax } }, function (dy, y) {
+            return {
+                x: function () { return dy.where(x.greater(ops.scalar(clipValueMin))
+                    .logicalAnd(x.less(ops.scalar(clipValueMax))), ops_1.zerosLike(dy)); },
+            };
+        });
+    };
+    Ops.relu = function (x) {
+        return environment_1.ENV.engine.executeKernel('Relu', { inputs: { x: x } }, function (dy, y) {
+            var stepRes = x.step();
+            return { x: function () { return dy.mul(stepRes.toFloat()); } };
+        });
+    };
+    Ops.elu = function (x) {
+        var der = function (dy) {
+            return {
+                x: function () { return dy.mul(eluDer(x)); },
+                alpha: function () {
+                    throw new Error('Derivative of prelu with respect to alpha is ' +
+                        'not implemented yet');
+                }
+            };
+        };
+        return environment_1.ENV.engine.executeKernel('Elu', { inputs: { x: x } }, der);
+    };
+    Ops.selu = function (x) {
+        var gradient = function (dy, y) {
+            return {
+                x: function () {
+                    var mask = x.greater(ops.scalar(0));
+                    var scaleAlpha = ops.scalar(selu_util.SELU_SCALEALPHA);
+                    var scale = ops.scalar(selu_util.SELU_SCALE);
+                    var greaterThanZeroDer = dy.mul(scale);
+                    var lessEqualZeroDer = dy.mul(scaleAlpha).mul(x.toFloat().exp());
+                    var res = ops.where(mask, greaterThanZeroDer, lessEqualZeroDer);
+                    return res;
+                }
+            };
+        };
+        return environment_1.ENV.engine.executeKernel('Selu', { inputs: { x: x } }, gradient);
+    };
+    Ops.leakyRelu = function (x, alpha) {
+        if (alpha === void 0) { alpha = 0.2; }
+        var gradient = function (dy, y) {
+            return { x: function () { return dy.mul(x.step(alpha)); } };
+        };
+        return environment_1.ENV.engine.executeKernel('LeakyRelu', { inputs: { x: x }, args: { alpha: alpha } }, gradient);
+    };
+    Ops.prelu = function (x, alpha) {
+        var der = function (dy) {
+            return {
+                x: function () { return dy.mul(preluDer(x, alpha)); },
+                alpha: function () {
+                    throw new Error('Derivative of prelu with respect to alpha is ' +
+                        'not implemented yet');
+                }
+            };
+        };
+        return environment_1.ENV.engine.executeKernel('PReLU', { inputs: { x: x, alpha: alpha } }, der);
+    };
+    Ops.sigmoid = function (x) {
+        return environment_1.ENV.engine.executeKernel('Sigmoid', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return dy.mul(y.mul(ops.scalar(1).sub(y))); } };
+        });
+    };
+    Ops.sin = function (x) {
+        return environment_1.ENV.engine.executeKernel('Sin', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return x.toFloat().cos().mul(dy); } };
+        });
+    };
+    Ops.cos = function (x) {
+        return environment_1.ENV.engine.executeKernel('Cos', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return x.toFloat().sin().neg().mul(dy); } };
+        });
+    };
+    Ops.tan = function (x) {
+        return environment_1.ENV.engine.executeKernel('Tan', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return dy.div(x.cos().square()); } };
+        });
+    };
+    Ops.asin = function (x) {
+        return environment_1.ENV.engine.executeKernel('Asin', { inputs: { x: x } }, function (dy, y) {
+            return {
+                x: function () { return dy.div(Ops.sqrt(ops.scalar(1).sub(x.toFloat().square()))); }
+            };
+        });
+    };
+    Ops.acos = function (x) {
+        return environment_1.ENV.engine.executeKernel('Acos', { inputs: { x: x } }, function (dy, y) {
+            return {
+                x: function () { return dy.div(Ops.sqrt(ops.scalar(1).sub(x.toFloat().square()))).neg(); }
+            };
+        });
+    };
+    Ops.atan = function (x) {
+        return environment_1.ENV.engine.executeKernel('Atan', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return dy.div(ops.scalar(1).add(x.toFloat().square())); } };
+        });
+    };
+    Ops.sinh = function (x) {
+        return environment_1.ENV.engine.executeKernel('Sinh', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return x.toFloat().cosh().mul(dy); } };
+        });
+    };
+    Ops.cosh = function (x) {
+        return environment_1.ENV.engine.executeKernel('Cosh', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return x.toFloat().sinh().mul(dy); } };
+        });
+    };
+    Ops.tanh = function (x) {
+        return environment_1.ENV.engine.executeKernel('Tanh', { inputs: { x: x } }, function (dy, y) {
+            return { x: function () { return ops.scalar(1).sub(y.square()).mul(dy); } };
+        });
+    };
+    Ops.step = function (x, alpha) {
+        if (alpha === void 0) { alpha = 0.0; }
+        return environment_1.ENV.engine.executeKernel('Step', { inputs: { x: x }, args: { alpha: alpha } }, function (dy, y) {
+            return { x: function () { return ops.zeros(y.shape); } };
+        });
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "neg", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "ceil", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "floor", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "exp", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "log", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "sqrt", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "square", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "abs", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "clipByValue", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "relu", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "elu", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "selu", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "leakyRelu", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "prelu", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "sigmoid", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "sin", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "cos", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "tan", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "asin", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "acos", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "atan", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "sinh", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "cosh", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "tanh", null);
+    __decorate([
+        doc_1.doc({ heading: 'Operations', subheading: 'Basic math' }),
+        operation_1.operation
+    ], Ops, "step", null);
+    return Ops;
+}());
+exports.Ops = Ops;
+function preluDer(x, alpha) {
+    return environment_1.ENV.engine.executeKernel('PReLUDer', { inputs: { x: x, alpha: alpha } });
+}
+function eluDer(x) {
+    return environment_1.ENV.engine.executeKernel('EluDer', { inputs: { x: x } });
+}
+
+},{"../doc":32,"../environment":34,"../util":151,"./operation":122,"./ops":123,"./selu_util":129}],135:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var environment_1 = require("../environment");
+var globals_1 = require("../globals");
+var tensor_array_map_1 = require("../graph/tensor_array_map");
+var ops_1 = require("../ops/ops");
+var tensor_1 = require("../tensor");
+var tensor_2 = require("../tensor");
+var optimizer_1 = require("./optimizer");
+var AdadeltaOptimizer = (function (_super) {
+    __extends(AdadeltaOptimizer, _super);
+    function AdadeltaOptimizer(learningRate, rho, specifiedVariableList, epsilon) {
+        if (epsilon === void 0) { epsilon = 1e-8; }
+        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
+        _this.accumulatedGrads = {};
+        _this.accumulatedUpdates = {};
+        _this.accumulatedSquaredGradientsGraph = new tensor_array_map_1.TensorArrayMap();
+        _this.accumulatedUpdatesGraph = new tensor_array_map_1.TensorArrayMap();
+        _this.c = globals_1.keep(ops_1.scalar(-learningRate));
+        _this.epsilon = globals_1.keep(ops_1.scalar(epsilon));
+        _this.rho = globals_1.keep(ops_1.scalar(rho));
+        _this.oneMinusRho = globals_1.keep(ops_1.scalar(1 - rho));
+        return _this;
+    }
+    AdadeltaOptimizer.prototype.applyGradients = function (variableGradients) {
+        var _this = this;
+        var _loop_1 = function (variableName) {
+            var value = environment_1.ENV.engine.registeredVariables[variableName];
+            if (this_1.accumulatedGrads[variableName] == null) {
+                var trainable_1 = false;
+                globals_1.tidy(function () {
+                    _this.accumulatedGrads[variableName] =
+                        tensor_2.variable(ops_1.zerosLike(value), trainable_1);
+                });
+            }
+            if (this_1.accumulatedUpdates[variableName] == null) {
+                var trainable_2 = false;
+                globals_1.tidy(function () {
+                    _this.accumulatedUpdates[variableName] =
+                        tensor_2.variable(ops_1.zerosLike(value), trainable_2);
+                });
+            }
+            var gradient = variableGradients[variableName];
+            var accumulatedGrad = this_1.accumulatedGrads[variableName];
+            var accumulatedUpdate = this_1.accumulatedUpdates[variableName];
+            globals_1.tidy(function () {
+                var newAccumulatedGrad = _this.rho.mul(accumulatedGrad)
+                    .add(_this.oneMinusRho.mul(gradient.square()));
+                var updates = accumulatedUpdate.add(_this.epsilon)
+                    .sqrt()
+                    .div(accumulatedGrad.add(_this.epsilon).sqrt())
+                    .mul(gradient);
+                var newAccumulatedUpdate = _this.rho.mul(accumulatedUpdate)
+                    .add(_this.oneMinusRho.mul(updates.square()));
+                _this.accumulatedGrads[variableName].assign(newAccumulatedGrad);
+                _this.accumulatedUpdates[variableName].assign(newAccumulatedUpdate);
+                var newValue = _this.c.mul(updates).add(value);
+                value.assign(newValue);
+            });
+        };
+        var this_1 = this;
+        for (var variableName in variableGradients) {
+            _loop_1(variableName);
+        }
+    };
+    AdadeltaOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        _super.prototype.beforeBatch.call(this, math, batchSize, runtime, activationArrayMap, gradientArrayMap);
+        if (this.accumulatedSquaredGradientsGraph.size() === 0) {
+            this.variableNodes.forEach(function (node) {
+                _this.accumulatedSquaredGradientsGraph.set(node.output, tensor_1.Tensor.zeros(node.output.shape));
+                _this.accumulatedUpdatesGraph.set(node.output, tensor_1.Tensor.zeros(node.output.shape));
+            });
+        }
+    };
+    AdadeltaOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        if (this.one == null) {
+            this.one = globals_1.keep(ops_1.scalar(1));
+        }
+        globals_1.tidy(function () {
+            _this.variableNodes.forEach(function (node) {
+                var oldVariable = activationArrayMap.get(node.output);
+                var gradient = _this.variableGradients.get(node.output);
+                var oldCache = _this.accumulatedSquaredGradientsGraph.get(node.output);
+                var oldUpdates = _this.accumulatedUpdatesGraph.get(node.output);
+                var gradientSquare = math.multiply(gradient, gradient);
+                var cache = math.scaledArrayAdd(_this.rho, oldCache, math.subtract(_this.one, _this.rho), gradientSquare);
+                var updates = math.multiply(math.divide(math.sqrt(math.add(oldUpdates, _this.epsilon)), math.sqrt(math.add(oldCache, _this.epsilon))), gradient);
+                var variable = math.scaledArrayAdd(_this.cGraph, updates, _this.one, oldVariable);
+                var updateSquare = math.multiply(updates, updates);
+                var newUpdates = math.scaledArrayAdd(_this.rho, oldUpdates, math.subtract(_this.one, _this.rho), updateSquare);
+                _this.accumulatedSquaredGradientsGraph.set(node.output, globals_1.keep(cache));
+                _this.accumulatedUpdatesGraph.set(node.output, globals_1.keep(newUpdates));
+                activationArrayMap.set(node.output, globals_1.keep(variable));
+                node.data = variable;
+                oldVariable.dispose();
+                oldCache.dispose();
+                oldUpdates.dispose();
+            });
+        });
+        this.variableGradients.dispose();
+        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
+    };
+    AdadeltaOptimizer.prototype.dispose = function () {
+        var _this = this;
+        _super.prototype.dispose.call(this);
+        this.c.dispose();
+        this.epsilon.dispose();
+        this.rho.dispose();
+        this.oneMinusRho.dispose();
+        if (this.one != null) {
+            this.one.dispose();
+        }
+        if (this.accumulatedSquaredGradientsGraph != null) {
+            this.accumulatedSquaredGradientsGraph.dispose();
+        }
+        if (this.accumulatedUpdatesGraph != null) {
+            this.accumulatedUpdatesGraph.dispose();
+        }
+        if (this.accumulatedUpdates != null) {
+            Object.keys(this.accumulatedUpdates)
+                .forEach(function (name) { return _this.accumulatedUpdates[name].dispose(); });
+            Object.keys(this.accumulatedGrads)
+                .forEach(function (name) { return _this.accumulatedGrads[name].dispose(); });
+        }
+    };
+    return AdadeltaOptimizer;
+}(optimizer_1.Optimizer));
+exports.AdadeltaOptimizer = AdadeltaOptimizer;
+
+},{"../environment":34,"../globals":35,"../graph/tensor_array_map":66,"../ops/ops":123,"../tensor":146,"./optimizer":140}],136:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var environment_1 = require("../environment");
+var globals_1 = require("../globals");
+var tensor_array_map_1 = require("../graph/tensor_array_map");
+var ops_1 = require("../ops/ops");
+var tensor_1 = require("../tensor");
+var tensor_2 = require("../tensor");
+var optimizer_1 = require("./optimizer");
+var AdagradOptimizer = (function (_super) {
+    __extends(AdagradOptimizer, _super);
+    function AdagradOptimizer(learningRate, specifiedVariableList, initialAccumulatorValue) {
+        if (initialAccumulatorValue === void 0) { initialAccumulatorValue = 0.1; }
+        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
+        _this.learningRate = learningRate;
+        _this.initialAccumulatorValue = initialAccumulatorValue;
+        _this.accumulatedGrads = {};
+        _this.accumulatedSquaredGradients = new tensor_array_map_1.TensorArrayMap();
+        _this.c = globals_1.keep(ops_1.scalar(-learningRate));
+        _this.epsilon = globals_1.keep(ops_1.scalar(1e-8));
+        return _this;
+    }
+    AdagradOptimizer.prototype.applyGradients = function (variableGradients) {
+        var _this = this;
+        var _loop_1 = function (variableName) {
+            var value = environment_1.ENV.engine.registeredVariables[variableName];
+            if (this_1.accumulatedGrads[variableName] == null) {
+                var trainable_1 = false;
+                globals_1.tidy(function () {
+                    _this.accumulatedGrads[variableName] = tensor_2.variable(ops_1.fill(value.shape, _this.initialAccumulatorValue), trainable_1);
+                });
+            }
+            var gradient = variableGradients[variableName];
+            var accumulatedGrad = this_1.accumulatedGrads[variableName];
+            globals_1.tidy(function () {
+                var newAccumulatedGrad = accumulatedGrad.add(gradient.square());
+                _this.accumulatedGrads[variableName].assign(newAccumulatedGrad);
+                var newValue = _this.c
+                    .mul(gradient.div(newAccumulatedGrad.add(_this.epsilon).sqrt()))
+                    .add(value);
+                value.assign(newValue);
+            });
+        };
+        var this_1 = this;
+        for (var variableName in variableGradients) {
+            _loop_1(variableName);
+        }
+    };
+    AdagradOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        _super.prototype.beforeBatch.call(this, math, batchSize, runtime, activationArrayMap, gradientArrayMap);
+        if (this.accumulatedSquaredGradients.size() === 0) {
+            this.variableNodes.forEach(function (node) {
+                _this.accumulatedSquaredGradients.set(node.output, tensor_1.Tensor.zeros(node.output.shape));
+            });
+        }
+    };
+    AdagradOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        if (this.one == null) {
+            this.one = globals_1.keep(ops_1.scalar(1));
+        }
+        globals_1.tidy(function () {
+            _this.variableNodes.forEach(function (node) {
+                var oldVariable = activationArrayMap.get(node.output);
+                var gradient = _this.variableGradients.get(node.output);
+                var oldCache = _this.accumulatedSquaredGradients.get(node.output);
+                var gradientSquare = math.multiply(gradient, gradient);
+                var cache = math.add(oldCache, gradientSquare);
+                var variable = math.scaledArrayAdd(_this.cGraph, math.divide(gradient, math.add(math.sqrt(cache), _this.epsilon)), _this.one, oldVariable);
+                _this.accumulatedSquaredGradients.set(node.output, globals_1.keep(cache));
+                activationArrayMap.set(node.output, globals_1.keep(variable));
+                node.data = variable;
+                oldVariable.dispose();
+                oldCache.dispose();
+            });
+        });
+        this.variableGradients.dispose();
+        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
+    };
+    AdagradOptimizer.prototype.dispose = function () {
+        var _this = this;
+        _super.prototype.dispose.call(this);
+        this.epsilon.dispose();
+        this.c.dispose();
+        if (this.one != null) {
+            this.one.dispose();
+        }
+        if (this.accumulatedSquaredGradients != null) {
+            this.accumulatedSquaredGradients.dispose();
+        }
+        if (this.accumulatedGrads != null) {
+            Object.keys(this.accumulatedGrads)
+                .forEach(function (name) { return _this.accumulatedGrads[name].dispose(); });
+        }
+    };
+    return AdagradOptimizer;
+}(optimizer_1.Optimizer));
+exports.AdagradOptimizer = AdagradOptimizer;
+
+},{"../environment":34,"../globals":35,"../graph/tensor_array_map":66,"../ops/ops":123,"../tensor":146,"./optimizer":140}],137:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var environment_1 = require("../environment");
+var globals_1 = require("../globals");
+var tensor_array_map_1 = require("../graph/tensor_array_map");
+var ops_1 = require("../ops/ops");
+var tensor_1 = require("../tensor");
+var tensor_2 = require("../tensor");
+var optimizer_1 = require("./optimizer");
+var AdamOptimizer = (function (_super) {
+    __extends(AdamOptimizer, _super);
+    function AdamOptimizer(learningRate, beta1, beta2, epsilon, specifiedVariableList) {
+        if (epsilon === void 0) { epsilon = 1e-8; }
+        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
+        _this.learningRate = learningRate;
+        _this.accumulatedFirstMoment = {};
+        _this.accumulatedSecondMoment = {};
+        _this.firstMomentGraph = new tensor_array_map_1.TensorArrayMap();
+        _this.secondMomentGraph = new tensor_array_map_1.TensorArrayMap();
+        _this.c = globals_1.keep(ops_1.scalar(-learningRate));
+        _this.eps = globals_1.keep(ops_1.scalar(epsilon));
+        _this.beta1 = globals_1.keep(ops_1.scalar(beta1));
+        _this.beta2 = globals_1.keep(ops_1.scalar(beta2));
+        globals_1.tidy(function () {
+            _this.accBeta1 = tensor_2.variable(ops_1.scalar(beta1));
+            _this.accBeta2 = tensor_2.variable(ops_1.scalar(beta2));
+        });
+        _this.oneMinusBeta1 = globals_1.keep(ops_1.scalar(1 - beta1));
+        _this.oneMinusBeta2 = globals_1.keep(ops_1.scalar(1 - beta2));
+        _this.one = globals_1.keep(ops_1.scalar(1));
+        return _this;
+    }
+    AdamOptimizer.prototype.applyGradients = function (variableGradients) {
+        var _this = this;
+        globals_1.tidy(function () {
+            var oneMinusAccBeta1 = _this.one.sub(_this.accBeta1);
+            var oneMinusAccBeta2 = _this.one.sub(_this.accBeta2);
+            for (var variableName in variableGradients) {
+                var value = environment_1.ENV.engine.registeredVariables[variableName];
+                if (_this.accumulatedFirstMoment[variableName] == null) {
+                    var trainable = false;
+                    _this.accumulatedFirstMoment[variableName] =
+                        tensor_2.variable(ops_1.zerosLike(value), trainable);
+                }
+                if (_this.accumulatedSecondMoment[variableName] == null) {
+                    var trainable = false;
+                    _this.accumulatedSecondMoment[variableName] =
+                        tensor_2.variable(ops_1.zerosLike(value), trainable);
+                }
+                var gradient = variableGradients[variableName];
+                var firstMoment = _this.accumulatedFirstMoment[variableName];
+                var secondMoment = _this.accumulatedSecondMoment[variableName];
+                var newFirstMoment = _this.beta1.mul(firstMoment).add(_this.oneMinusBeta1.mul(gradient));
+                var newSecondMoment = _this.beta2.mul(secondMoment)
+                    .add(_this.oneMinusBeta2.mul(gradient.square()));
+                var biasCorrectedFirstMoment = newFirstMoment.div(oneMinusAccBeta1);
+                var biasCorrectedSecondMoment = newSecondMoment.div(oneMinusAccBeta2);
+                _this.accumulatedFirstMoment[variableName].assign(newFirstMoment);
+                _this.accumulatedSecondMoment[variableName].assign(newSecondMoment);
+                var newValue = _this.c
+                    .mul(biasCorrectedFirstMoment.div(_this.eps.add(biasCorrectedSecondMoment.sqrt())))
+                    .add(value);
+                value.assign(newValue);
+            }
+            _this.accBeta1.assign(_this.accBeta1.mul(_this.beta1));
+            _this.accBeta2.assign(_this.accBeta2.mul(_this.beta2));
+        });
+    };
+    AdamOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        _super.prototype.beforeBatch.call(this, math, batchSize, runtime, activationArrayMap, gradientArrayMap);
+        if (this.firstMomentGraph.size() === 0) {
+            this.variableNodes.forEach(function (node) {
+                _this.firstMomentGraph.set(node.output, tensor_1.Tensor.zeros(node.output.shape));
+            });
+        }
+        if (this.secondMomentGraph.size() === 0) {
+            this.variableNodes.forEach(function (node) {
+                _this.secondMomentGraph.set(node.output, tensor_1.Tensor.zeros(node.output.shape));
+            });
+        }
+    };
+    AdamOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        globals_1.tidy(function () {
+            var oneMinusAccBeta1 = _this.one.sub(_this.accBeta1);
+            var oneMinusAccBeta2 = _this.one.sub(_this.accBeta2);
+            _this.variableNodes.forEach(function (node) {
+                var oldVariable = activationArrayMap.get(node.output);
+                var gradient = _this.variableGradients.get(node.output);
+                var oldFirstMoment = _this.firstMomentGraph.get(node.output);
+                var oldSecondMoment = _this.secondMomentGraph.get(node.output);
+                var newFirstMoment = math.scaledArrayAdd(_this.beta1, oldFirstMoment, _this.oneMinusBeta1, gradient);
+                var newSecondMoment = math.scaledArrayAdd(_this.beta2, oldSecondMoment, _this.oneMinusBeta2, gradient.square());
+                var biasCorrectedFirstMoment = newFirstMoment.div(oneMinusAccBeta1);
+                var biasCorrectedSecondMoment = newSecondMoment.div(oneMinusAccBeta2);
+                var variable = math.scaledArrayAdd(_this.cGraph, biasCorrectedFirstMoment.div(_this.eps.add(biasCorrectedSecondMoment.sqrt())), _this.one, oldVariable);
+                activationArrayMap.set(node.output, globals_1.keep(variable));
+                node.data = variable;
+                _this.firstMomentGraph.set(node.output, globals_1.keep(newFirstMoment));
+                _this.secondMomentGraph.set(node.output, globals_1.keep(newSecondMoment));
+                oldVariable.dispose();
+                gradient.dispose();
+                oldFirstMoment.dispose();
+                oldSecondMoment.dispose();
+            });
+            _this.accBeta1.assign(_this.accBeta1.mul(_this.beta1));
+            _this.accBeta2.assign(_this.accBeta2.mul(_this.beta2));
+        });
+        this.variableGradients.dispose();
+        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
+    };
+    AdamOptimizer.prototype.dispose = function () {
+        var _this = this;
+        _super.prototype.dispose.call(this);
+        this.c.dispose();
+        this.eps.dispose();
+        this.beta1.dispose();
+        this.beta2.dispose();
+        this.accBeta1.dispose();
+        this.accBeta2.dispose();
+        this.oneMinusBeta1.dispose();
+        this.oneMinusBeta2.dispose();
+        this.one.dispose();
+        if (this.firstMomentGraph != null) {
+            this.firstMomentGraph.dispose();
+        }
+        if (this.secondMomentGraph != null) {
+            this.secondMomentGraph.dispose();
+        }
+        if (this.accumulatedFirstMoment != null) {
+            Object.keys(this.accumulatedFirstMoment)
+                .forEach(function (name) { return _this.accumulatedFirstMoment[name].dispose(); });
+        }
+        if (this.accumulatedSecondMoment != null) {
+            Object.keys(this.accumulatedSecondMoment)
+                .forEach(function (name) { return _this.accumulatedSecondMoment[name].dispose(); });
+        }
+    };
+    return AdamOptimizer;
+}(optimizer_1.Optimizer));
+exports.AdamOptimizer = AdamOptimizer;
+
+},{"../environment":34,"../globals":35,"../graph/tensor_array_map":66,"../ops/ops":123,"../tensor":146,"./optimizer":140}],138:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var environment_1 = require("../environment");
+var globals_1 = require("../globals");
+var tensor_array_map_1 = require("../graph/tensor_array_map");
+var ops_1 = require("../ops/ops");
+var tensor_1 = require("../tensor");
+var tensor_2 = require("../tensor");
+var optimizer_1 = require("./optimizer");
+var AdamaxOptimizer = (function (_super) {
+    __extends(AdamaxOptimizer, _super);
+    function AdamaxOptimizer(learningRate, beta1, beta2, epsilon, decay, specifiedVariableList) {
+        if (epsilon === void 0) { epsilon = 1e-8; }
+        if (decay === void 0) { decay = 0.0; }
+        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
+        _this.learningRate = learningRate;
+        _this.accumulatedFirstMoment = {};
+        _this.accumulatedWeightedInfNorm = {};
+        _this.firstMomentGraph = new tensor_array_map_1.TensorArrayMap();
+        _this.weightedInfNormGraph = new tensor_array_map_1.TensorArrayMap();
+        _this.c = globals_1.keep(ops_1.scalar(-learningRate));
+        _this.eps = globals_1.keep(ops_1.scalar(epsilon));
+        _this.beta1 = globals_1.keep(ops_1.scalar(beta1));
+        _this.beta2 = globals_1.keep(ops_1.scalar(beta2));
+        _this.decay = globals_1.keep(ops_1.scalar(decay));
+        globals_1.tidy(function () {
+            _this.iteration = tensor_2.variable(ops_1.scalar(0));
+            _this.accBeta1 = tensor_2.variable(ops_1.scalar(beta1));
+        });
+        _this.oneMinusBeta1 = globals_1.keep(ops_1.scalar(1 - beta1));
+        _this.one = globals_1.keep(ops_1.scalar(1));
+        return _this;
+    }
+    AdamaxOptimizer.prototype.applyGradients = function (variableGradients) {
+        var _this = this;
+        globals_1.tidy(function () {
+            var oneMinusAccBeta1 = _this.one.sub(_this.accBeta1);
+            var lr = _this.c.div(_this.one.add(_this.decay.mul(_this.iteration)));
+            for (var variableName in variableGradients) {
+                var value = environment_1.ENV.engine.registeredVariables[variableName];
+                if (_this.accumulatedFirstMoment[variableName] == null) {
+                    var trainable = false;
+                    _this.accumulatedFirstMoment[variableName] =
+                        tensor_2.variable(ops_1.zerosLike(value), trainable);
+                }
+                if (_this.accumulatedWeightedInfNorm[variableName] == null) {
+                    var trainable = false;
+                    _this.accumulatedWeightedInfNorm[variableName] =
+                        tensor_2.variable(ops_1.zerosLike(value), trainable);
+                }
+                var gradient = variableGradients[variableName];
+                var firstMoment = _this.accumulatedFirstMoment[variableName];
+                var weightedInfNorm = _this.accumulatedWeightedInfNorm[variableName];
+                var newFirstMoment = _this.beta1.mul(firstMoment).add(_this.oneMinusBeta1.mul(gradient));
+                var ut0 = _this.beta2.mul(weightedInfNorm);
+                var ut1 = gradient.abs();
+                var newWeightedInfNorm = ut0.maximum(ut1);
+                _this.accumulatedFirstMoment[variableName].assign(newFirstMoment);
+                _this.accumulatedWeightedInfNorm[variableName].assign(newWeightedInfNorm);
+                var newValue = lr.div(oneMinusAccBeta1)
+                    .mul(newFirstMoment.div(_this.eps.add(newWeightedInfNorm)))
+                    .add(value);
+                value.assign(newValue);
+            }
+            _this.iteration.assign(_this.iteration.add(_this.one));
+            _this.accBeta1.assign(_this.accBeta1.mul(_this.beta1));
+        });
+    };
+    AdamaxOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        _super.prototype.beforeBatch.call(this, math, batchSize, runtime, activationArrayMap, gradientArrayMap);
+        if (this.firstMomentGraph.size() === 0) {
+            this.variableNodes.forEach(function (node) {
+                _this.firstMomentGraph.set(node.output, tensor_1.Tensor.zeros(node.output.shape));
+            });
+        }
+        if (this.weightedInfNormGraph.size() === 0) {
+            this.variableNodes.forEach(function (node) {
+                _this.weightedInfNormGraph.set(node.output, tensor_1.Tensor.zeros(node.output.shape));
+            });
+        }
+    };
+    AdamaxOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        globals_1.tidy(function () {
+            var lr = _this.cGraph.div(_this.one.add(_this.decay.mul(_this.iteration)));
+            _this.variableNodes.forEach(function (node) {
+                var oldVariable = activationArrayMap.get(node.output);
+                var gradient = _this.variableGradients.get(node.output);
+                var oldFirstMoment = _this.firstMomentGraph.get(node.output);
+                var oldWeightedInfNorm = _this.weightedInfNormGraph.get(node.output);
+                var newFirstMoment = math.scaledArrayAdd(_this.beta1, oldFirstMoment, _this.oneMinusBeta1, gradient);
+                var ut0 = _this.beta2.mul(oldWeightedInfNorm);
+                var ut1 = gradient.abs();
+                var newWeightedInfNorm = ut0.maximum(ut1);
+                var variable = math.scaledArrayAdd(_this.one, oldVariable, lr.div(_this.one.sub(_this.accBeta1)), newFirstMoment.div(_this.eps.add(newWeightedInfNorm)));
+                activationArrayMap.set(node.output, globals_1.keep(variable));
+                node.data = variable;
+                _this.firstMomentGraph.set(node.output, globals_1.keep(newFirstMoment));
+                _this.weightedInfNormGraph.set(node.output, globals_1.keep(newWeightedInfNorm));
+                oldVariable.dispose();
+                gradient.dispose();
+                oldFirstMoment.dispose();
+                oldWeightedInfNorm.dispose();
+            });
+            _this.iteration.assign(_this.iteration.add(_this.one));
+            _this.accBeta1.assign(_this.accBeta1.mul(_this.beta1));
+        });
+        this.variableGradients.dispose();
+        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
+    };
+    AdamaxOptimizer.prototype.dispose = function () {
+        var _this = this;
+        _super.prototype.dispose.call(this);
+        this.c.dispose();
+        this.eps.dispose();
+        this.accBeta1.dispose();
+        this.beta1.dispose();
+        this.beta2.dispose();
+        this.oneMinusBeta1.dispose();
+        this.decay.dispose();
+        this.iteration.dispose();
+        this.one.dispose();
+        if (this.firstMomentGraph != null) {
+            this.firstMomentGraph.dispose();
+        }
+        if (this.weightedInfNormGraph != null) {
+            this.weightedInfNormGraph.dispose();
+        }
+        if (this.accumulatedFirstMoment != null) {
+            Object.keys(this.accumulatedFirstMoment)
+                .forEach(function (name) { return _this.accumulatedFirstMoment[name].dispose(); });
+        }
+        if (this.accumulatedWeightedInfNorm != null) {
+            Object.keys(this.accumulatedWeightedInfNorm)
+                .forEach(function (name) { return _this.accumulatedWeightedInfNorm[name].dispose(); });
+        }
+    };
+    return AdamaxOptimizer;
+}(optimizer_1.Optimizer));
+exports.AdamaxOptimizer = AdamaxOptimizer;
+
+},{"../environment":34,"../globals":35,"../graph/tensor_array_map":66,"../ops/ops":123,"../tensor":146,"./optimizer":140}],139:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var environment_1 = require("../environment");
+var globals_1 = require("../globals");
+var tensor_array_map_1 = require("../graph/tensor_array_map");
+var ops_1 = require("../ops/ops");
+var tensor_1 = require("../tensor");
+var tensor_2 = require("../tensor");
+var sgd_optimizer_1 = require("./sgd_optimizer");
+var MomentumOptimizer = (function (_super) {
+    __extends(MomentumOptimizer, _super);
+    function MomentumOptimizer(learningRate, momentum, specifiedVariableList) {
+        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
+        _this.learningRate = learningRate;
+        _this.momentum = momentum;
+        _this.m = ops_1.scalar(_this.momentum);
+        _this.accumulations = {};
+        return _this;
+    }
+    MomentumOptimizer.prototype.applyGradients = function (variableGradients) {
+        var _this = this;
+        var _loop_1 = function (variableName) {
+            var value = environment_1.ENV.engine.registeredVariables[variableName];
+            if (this_1.accumulations[variableName] == null) {
+                var trainable_1 = false;
+                globals_1.tidy(function () {
+                    _this.accumulations[variableName] =
+                        tensor_2.variable(ops_1.zerosLike(value), trainable_1);
+                });
+            }
+            var accumulation = this_1.accumulations[variableName];
+            var gradient = variableGradients[variableName];
+            globals_1.tidy(function () {
+                var newAccumulation = _this.m.mul(accumulation).add(gradient);
+                _this.accumulations[variableName].assign(newAccumulation);
+                var newValue = _this.c.mul(newAccumulation).add(value);
+                value.assign(newValue);
+            });
+        };
+        var this_1 = this;
+        for (var variableName in variableGradients) {
+            _loop_1(variableName);
+        }
+    };
+    MomentumOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        if (this.variableVelocitiesGraph == null) {
+            this.variableVelocitiesGraph = new tensor_array_map_1.TensorArrayMap();
+        }
+        _super.prototype.beforeBatch.call(this, math, batchSize, runtime, activationArrayMap, gradientArrayMap);
+        if (this.variableVelocitiesGraph.size() === 0) {
+            this.variableNodes.forEach(function (node) {
+                _this.variableVelocitiesGraph.set(node.output, tensor_1.Tensor.zeros(node.output.shape));
+            });
+        }
+    };
+    MomentumOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        if (this.one == null) {
+            this.one = globals_1.keep(ops_1.scalar(1));
+        }
+        globals_1.tidy(function () {
+            _this.variableNodes.forEach(function (node) {
+                var oldVariable = activationArrayMap.get(node.output);
+                var gradient = _this.variableGradients.get(node.output);
+                var oldVelocity = _this.variableVelocitiesGraph.get(node.output);
+                var velocity = math.scaledArrayAdd(_this.m, oldVelocity, _this.one, gradient);
+                var variable = math.scaledArrayAdd(_this.cGraph, velocity, _this.one, oldVariable);
+                _this.variableVelocitiesGraph.set(node.output, globals_1.keep(velocity));
+                activationArrayMap.set(node.output, globals_1.keep(variable));
+                node.data = variable;
+                oldVariable.dispose();
+                oldVelocity.dispose();
+            });
+        });
+        this.variableGradients.dispose();
+        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
+    };
+    MomentumOptimizer.prototype.dispose = function () {
+        _super.prototype.dispose.call(this);
+        this.m.dispose();
+        if (this.one != null) {
+            this.one.dispose();
+        }
+        if (this.variableVelocitiesGraph != null) {
+            this.variableVelocitiesGraph.dispose();
+        }
+        if (this.accumulations != null) {
+            for (var variableName in this.accumulations) {
+                this.accumulations[variableName].dispose();
+            }
+        }
+    };
+    MomentumOptimizer.prototype.setMomentum = function (momentum) {
+        this.momentum = momentum;
+    };
+    return MomentumOptimizer;
+}(sgd_optimizer_1.SGDOptimizer));
+exports.MomentumOptimizer = MomentumOptimizer;
+
+},{"../environment":34,"../globals":35,"../graph/tensor_array_map":66,"../ops/ops":123,"../tensor":146,"./sgd_optimizer":143}],140:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var globals_1 = require("../globals");
+var session_util = require("../graph/session_util");
+var tensor_array_map_1 = require("../graph/tensor_array_map");
+var ops = require("../ops/ops");
+var tensor_1 = require("../tensor");
+var Optimizer = (function () {
+    function Optimizer(learningRate, specifiedVariableList) {
+        this.learningRate = learningRate;
+        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
+        if (specifiedVariableList != null) {
+            this.specifiedVariableNodes = specifiedVariableList;
+        }
+    }
+    Optimizer.prototype.minimize = function (f, returnCost, varList) {
+        if (returnCost === void 0) { returnCost = false; }
+        var _a = this.computeGradients(f, varList), value = _a.value, grads = _a.grads;
+        this.applyGradients(grads);
+        var varNames = Object.keys(grads);
+        varNames.forEach(function (varName) { return grads[varName].dispose(); });
+        if (returnCost) {
+            return value;
+        }
+        else {
+            value.dispose();
+            return null;
+        }
+    };
+    Optimizer.prototype.computeGradients = function (f, varList) {
+        return globals_1.variableGrads(f, varList);
+    };
+    Optimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        this.variableNodes = this.specifiedVariableNodes == null ?
+            session_util.getVariableNodesFromEvaluationSet(runtime.nodes) :
+            this.specifiedVariableNodes;
+        if (batchSize !== this.prevBatchSize) {
+            if (this.cGraph != null) {
+                this.cGraph.dispose();
+            }
+            this.prevBatchSize = batchSize;
+            this.cGraph = math.keep(ops.scalar(-this.learningRate / batchSize));
+        }
+        this.variableNodes.forEach(function (node) { return _this.variableGradients.set(node.output, math.keep(tensor_1.Tensor.zeros(node.output.shape))); });
+    };
+    Optimizer.prototype.afterExample = function (math, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        globals_1.tidy(function () {
+            _this.variableNodes.forEach(function (node) {
+                var gradient = gradientArrayMap.get(node.output);
+                var accumulatedGradient = _this.variableGradients.get(node.output);
+                _this.variableGradients.set(node.output, globals_1.keep(math.add(gradient, accumulatedGradient)));
+                accumulatedGradient.dispose();
+            });
+        });
+    };
+    Optimizer.prototype.dispose = function () {
+        if (this.cGraph != null) {
+            this.cGraph.dispose();
+        }
+        if (this.variableNodes != null) {
+            this.variableNodes.forEach(function (node) {
+                node.data.dispose();
+            });
+        }
+        if (this.specifiedVariableNodes != null) {
+            this.specifiedVariableNodes.forEach(function (node) {
+                node.data.dispose();
+            });
+        }
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Optimizers' })
+    ], Optimizer.prototype, "minimize", null);
+    Optimizer = __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Classes', namespace: 'train' })
+    ], Optimizer);
+    return Optimizer;
+}());
+exports.Optimizer = Optimizer;
+
+},{"../doc":32,"../globals":35,"../graph/session_util":65,"../graph/tensor_array_map":66,"../ops/ops":123,"../tensor":146}],141:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("../doc");
+var adadelta_optimizer_1 = require("./adadelta_optimizer");
+var adagrad_optimizer_1 = require("./adagrad_optimizer");
+var adam_optimizer_1 = require("./adam_optimizer");
+var adamax_optimizer_1 = require("./adamax_optimizer");
+var momentum_optimizer_1 = require("./momentum_optimizer");
+var rmsprop_optimizer_1 = require("./rmsprop_optimizer");
+var sgd_optimizer_1 = require("./sgd_optimizer");
+var OptimizerConstructors = (function () {
+    function OptimizerConstructors() {
+    }
+    OptimizerConstructors.sgd = function (learningRate) {
+        return new sgd_optimizer_1.SGDOptimizer(learningRate);
+    };
+    OptimizerConstructors.momentum = function (learningRate, momentum) {
+        return new momentum_optimizer_1.MomentumOptimizer(learningRate, momentum);
+    };
+    OptimizerConstructors.rmsprop = function (learningRate, decay, momentum, epsilon) {
+        if (decay === void 0) { decay = .9; }
+        if (momentum === void 0) { momentum = 0.0; }
+        if (epsilon === void 0) { epsilon = 1e-8; }
+        return new rmsprop_optimizer_1.RMSPropOptimizer(learningRate, decay, momentum, undefined, epsilon);
+    };
+    OptimizerConstructors.adam = function (learningRate, beta1, beta2, epsilon) {
+        if (learningRate === void 0) { learningRate = 0.001; }
+        if (beta1 === void 0) { beta1 = 0.9; }
+        if (beta2 === void 0) { beta2 = 0.999; }
+        if (epsilon === void 0) { epsilon = 1e-8; }
+        return new adam_optimizer_1.AdamOptimizer(learningRate, beta1, beta2, epsilon, undefined);
+    };
+    OptimizerConstructors.adadelta = function (learningRate, rho, epsilon) {
+        if (learningRate === void 0) { learningRate = .001; }
+        if (rho === void 0) { rho = .95; }
+        if (epsilon === void 0) { epsilon = 1e-8; }
+        return new adadelta_optimizer_1.AdadeltaOptimizer(learningRate, rho, undefined, epsilon);
+    };
+    OptimizerConstructors.adamax = function (learningRate, beta1, beta2, epsilon, decay) {
+        if (learningRate === void 0) { learningRate = 0.002; }
+        if (beta1 === void 0) { beta1 = 0.9; }
+        if (beta2 === void 0) { beta2 = 0.999; }
+        if (epsilon === void 0) { epsilon = 1e-8; }
+        if (decay === void 0) { decay = 0.0; }
+        return new adamax_optimizer_1.AdamaxOptimizer(learningRate, beta1, beta2, epsilon, decay, undefined);
+    };
+    OptimizerConstructors.adagrad = function (learningRate, initialAccumulatorValue) {
+        if (initialAccumulatorValue === void 0) { initialAccumulatorValue = 0.1; }
+        return new adagrad_optimizer_1.AdagradOptimizer(learningRate, undefined, initialAccumulatorValue);
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Optimizers', namespace: 'train' })
+    ], OptimizerConstructors, "sgd", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Optimizers', namespace: 'train' })
+    ], OptimizerConstructors, "momentum", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Optimizers', namespace: 'train' })
+    ], OptimizerConstructors, "rmsprop", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Optimizers', namespace: 'train' })
+    ], OptimizerConstructors, "adam", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Optimizers', namespace: 'train' })
+    ], OptimizerConstructors, "adadelta", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Optimizers', namespace: 'train' })
+    ], OptimizerConstructors, "adamax", null);
+    __decorate([
+        doc_1.doc({ heading: 'Training', subheading: 'Optimizers', namespace: 'train' })
+    ], OptimizerConstructors, "adagrad", null);
+    return OptimizerConstructors;
+}());
+exports.OptimizerConstructors = OptimizerConstructors;
+
+},{"../doc":32,"./adadelta_optimizer":135,"./adagrad_optimizer":136,"./adam_optimizer":137,"./adamax_optimizer":138,"./momentum_optimizer":139,"./rmsprop_optimizer":142,"./sgd_optimizer":143}],142:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var environment_1 = require("../environment");
+var globals_1 = require("../globals");
+var session_util = require("../graph/session_util");
+var tensor_array_map_1 = require("../graph/tensor_array_map");
+var ops_1 = require("../ops/ops");
+var tensor_1 = require("../tensor");
+var tensor_2 = require("../tensor");
+var optimizer_1 = require("./optimizer");
+var RMSPropOptimizer = (function (_super) {
+    __extends(RMSPropOptimizer, _super);
+    function RMSPropOptimizer(learningRate, decay, momentum, specifiedVariableList, epsilon) {
+        if (decay === void 0) { decay = 0.9; }
+        if (momentum === void 0) { momentum = 0.0; }
+        if (epsilon === void 0) { epsilon = 1e-8; }
+        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
+        _this.learningRate = learningRate;
+        _this.accumulatedMeanSquares = {};
+        _this.accumulatedMoments = {};
+        _this.accumulatedMeanSquaredGraph = new tensor_array_map_1.TensorArrayMap();
+        _this.accumulatedMomentGraph = new tensor_array_map_1.TensorArrayMap();
+        _this.c = globals_1.keep(ops_1.scalar(learningRate));
+        _this.epsilon = globals_1.keep(ops_1.scalar(epsilon));
+        _this.decay = globals_1.keep(ops_1.scalar(decay));
+        _this.momentum = globals_1.keep(ops_1.scalar(momentum));
+        _this.oneMinusDecay = globals_1.keep(ops_1.scalar(1 - decay));
+        return _this;
+    }
+    RMSPropOptimizer.prototype.applyGradients = function (variableGradients) {
+        var _this = this;
+        var _loop_1 = function (variableName) {
+            var value = environment_1.ENV.engine.registeredVariables[variableName];
+            if (this_1.accumulatedMeanSquares[variableName] == null) {
+                var trainable_1 = false;
+                globals_1.tidy(function () {
+                    _this.accumulatedMeanSquares[variableName] =
+                        tensor_2.variable(ops_1.zerosLike(value), trainable_1);
+                });
+            }
+            if (this_1.accumulatedMoments[variableName] == null) {
+                var trainable_2 = false;
+                globals_1.tidy(function () {
+                    _this.accumulatedMoments[variableName] =
+                        tensor_2.variable(ops_1.zerosLike(value), trainable_2);
+                });
+            }
+            var accumulatedMeanSquare = this_1.accumulatedMeanSquares[variableName];
+            var accumulatedMoments = this_1.accumulatedMoments[variableName];
+            var gradient = variableGradients[variableName];
+            globals_1.tidy(function () {
+                var newAccumulatedMeanSquare = _this.decay.mul(accumulatedMeanSquare)
+                    .add(_this.oneMinusDecay.mul(gradient.square()));
+                var newAccumulatedMoments = _this.momentum.mul(accumulatedMoments)
+                    .add(_this.c.mul(gradient).div(newAccumulatedMeanSquare.add(_this.epsilon).sqrt()));
+                _this.accumulatedMeanSquares[variableName].assign(newAccumulatedMeanSquare);
+                _this.accumulatedMoments[variableName].assign(newAccumulatedMoments);
+                var newValue = value.sub(newAccumulatedMoments);
+                value.assign(newValue);
+            });
+        };
+        var this_1 = this;
+        for (var variableName in variableGradients) {
+            _loop_1(variableName);
+        }
+    };
+    RMSPropOptimizer.prototype.beforeBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        this.variableNodes = this.specifiedVariableNodes == null ?
+            session_util.getVariableNodesFromEvaluationSet(runtime.nodes) :
+            this.specifiedVariableNodes;
+        if (batchSize !== this.prevBatchSize) {
+            if (this.cGraph != null) {
+                this.cGraph.dispose();
+            }
+            this.prevBatchSize = batchSize;
+            this.cGraph = math.keep(ops_1.scalar(this.learningRate / batchSize));
+        }
+        this.variableNodes.forEach(function (node) { return _this.variableGradients.set(node.output, math.keep(tensor_1.Tensor.zeros(node.output.shape))); });
+        if (this.accumulatedMeanSquaredGraph.size() === 0) {
+            this.variableNodes.forEach(function (node) {
+                _this.accumulatedMeanSquaredGraph.set(node.output, tensor_1.Tensor.zeros(node.output.shape));
+                _this.accumulatedMomentGraph.set(node.output, tensor_1.Tensor.zeros(node.output.shape));
+            });
+        }
+    };
+    RMSPropOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        globals_1.tidy(function () {
+            _this.variableNodes.forEach(function (node) {
+                var oldVariable = activationArrayMap.get(node.output);
+                var gradient = _this.variableGradients.get(node.output);
+                var oldMeanSquare = _this.accumulatedMeanSquaredGraph.get(node.output);
+                var oldMoment = _this.accumulatedMomentGraph.get(node.output);
+                var meanSquare = math.scaledArrayAdd(_this.decay, oldMeanSquare, _this.oneMinusDecay, gradient.square());
+                var moment = math.scaledArrayAdd(_this.momentum, oldMoment, _this.cGraph, gradient.div(meanSquare.add(_this.epsilon).sqrt()));
+                var variable = oldVariable.sub(moment);
+                _this.accumulatedMeanSquaredGraph.set(node.output, globals_1.keep(meanSquare));
+                _this.accumulatedMomentGraph.set(node.output, globals_1.keep(moment));
+                activationArrayMap.set(node.output, globals_1.keep(variable));
+                node.data = variable;
+                oldVariable.dispose();
+                oldMeanSquare.dispose();
+                oldMoment.dispose();
+            });
+        });
+        this.variableGradients.dispose();
+        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
+    };
+    RMSPropOptimizer.prototype.dispose = function () {
+        var _this = this;
+        _super.prototype.dispose.call(this);
+        this.c.dispose();
+        this.epsilon.dispose();
+        this.decay.dispose();
+        this.momentum.dispose();
+        this.oneMinusDecay.dispose();
+        if (this.accumulatedMeanSquaredGraph != null) {
+            this.accumulatedMeanSquaredGraph.dispose();
+        }
+        if (this.accumulatedMomentGraph != null) {
+            this.accumulatedMomentGraph.dispose();
+        }
+        if (this.accumulatedMeanSquares != null) {
+            Object.keys(this.accumulatedMeanSquares)
+                .forEach(function (name) { return _this.accumulatedMeanSquares[name].dispose(); });
+        }
+        if (this.accumulatedMoments != null) {
+            Object.keys(this.accumulatedMoments)
+                .forEach(function (name) { return _this.accumulatedMoments[name].dispose(); });
+        }
+    };
+    return RMSPropOptimizer;
+}(optimizer_1.Optimizer));
+exports.RMSPropOptimizer = RMSPropOptimizer;
+
+},{"../environment":34,"../globals":35,"../graph/session_util":65,"../graph/tensor_array_map":66,"../ops/ops":123,"../tensor":146,"./optimizer":140}],143:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+var environment_1 = require("../environment");
+var globals_1 = require("../globals");
+var tensor_array_map_1 = require("../graph/tensor_array_map");
+var ops_1 = require("../ops/ops");
+var optimizer_1 = require("./optimizer");
+var SGDOptimizer = (function (_super) {
+    __extends(SGDOptimizer, _super);
+    function SGDOptimizer(learningRate, specifiedVariableList) {
+        var _this = _super.call(this, learningRate, specifiedVariableList) || this;
+        _this.learningRate = learningRate;
+        _this.setLearningRate(learningRate);
+        return _this;
+    }
+    SGDOptimizer.prototype.applyGradients = function (variableGradients) {
+        var _this = this;
+        var varNames = Object.keys(variableGradients);
+        varNames.forEach(function (varName) {
+            var gradient = variableGradients[varName];
+            var value = environment_1.ENV.engine.registeredVariables[varName];
+            globals_1.tidy(function () {
+                var newValue = _this.c.mul(gradient).add(value);
+                value.assign(newValue);
+            });
+        });
+    };
+    SGDOptimizer.prototype.setLearningRate = function (learningRate) {
+        this.learningRate = learningRate;
+        if (this.c != null) {
+            this.c.dispose();
+        }
+        this.c = environment_1.ENV.math.keep(ops_1.scalar(-learningRate));
+    };
+    SGDOptimizer.prototype.dispose = function () {
+        this.c.dispose();
+        if (this.one != null) {
+            this.one.dispose();
+        }
+        _super.prototype.dispose.call(this);
+    };
+    SGDOptimizer.prototype.afterBatch = function (math, batchSize, runtime, activationArrayMap, gradientArrayMap) {
+        var _this = this;
+        if (this.one == null) {
+            this.one = globals_1.keep(ops_1.scalar(1));
+        }
+        globals_1.tidy(function () {
+            _this.variableNodes.forEach(function (node) {
+                var oldVariable = activationArrayMap.get(node.output);
+                var gradient = _this.variableGradients.get(node.output);
+                var variable = math.scaledArrayAdd(_this.cGraph, gradient, _this.one, oldVariable);
+                activationArrayMap.set(node.output, globals_1.keep(variable));
+                node.data = variable;
+                oldVariable.dispose();
+            });
+        });
+        this.variableGradients.dispose();
+        this.variableGradients = new tensor_array_map_1.TensorArrayMap();
+    };
+    return SGDOptimizer;
+}(optimizer_1.Optimizer));
+exports.SGDOptimizer = SGDOptimizer;
+
+},{"../environment":34,"../globals":35,"../graph/tensor_array_map":66,"../ops/ops":123,"./optimizer":140}],144:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var SumTypesMap;
-(function (SumTypesMap) {
-    SumTypesMap["float32"] = "float32";
-    SumTypesMap["int32"] = "int32";
-    SumTypesMap["bool"] = "int32";
-})(SumTypesMap = exports.SumTypesMap || (exports.SumTypesMap = {}));
-var UpcastInt32AndMap;
-(function (UpcastInt32AndMap) {
-    UpcastInt32AndMap["float32"] = "float32";
-    UpcastInt32AndMap["int32"] = "int32";
-    UpcastInt32AndMap["bool"] = "int32";
-})(UpcastInt32AndMap = exports.UpcastInt32AndMap || (exports.UpcastInt32AndMap = {}));
-var UpcastBoolAndMap;
-(function (UpcastBoolAndMap) {
-    UpcastBoolAndMap["float32"] = "float32";
-    UpcastBoolAndMap["int32"] = "int32";
-    UpcastBoolAndMap["bool"] = "bool";
-})(UpcastBoolAndMap = exports.UpcastBoolAndMap || (exports.UpcastBoolAndMap = {}));
-var UpcastFloat32AndMap;
-(function (UpcastFloat32AndMap) {
-    UpcastFloat32AndMap["float32"] = "float32";
-    UpcastFloat32AndMap["int32"] = "float32";
-    UpcastFloat32AndMap["bool"] = "float32";
-})(UpcastFloat32AndMap = exports.UpcastFloat32AndMap || (exports.UpcastFloat32AndMap = {}));
-var upcastTypeMap = {
-    float32: UpcastFloat32AndMap,
-    int32: UpcastInt32AndMap,
-    bool: UpcastBoolAndMap
-};
-function upcastType(typeA, typeB) {
-    return upcastTypeMap[typeA][typeB];
-}
-exports.upcastType = upcastType;
+var util = require("./util");
+var Profiler = (function () {
+    function Profiler(backendTimer, logger) {
+        this.backendTimer = backendTimer;
+        this.logger = logger;
+        if (logger == null) {
+            this.logger = new Logger();
+        }
+    }
+    Profiler.prototype.profileKernel = function (kernelName, f) {
+        var _this = this;
+        var result;
+        var holdResultWrapperFn = function () {
+            result = f();
+        };
+        var timer = this.backendTimer.time(holdResultWrapperFn);
+        var vals = result.dataSync();
+        util.checkForNaN(vals, result.dtype, kernelName);
+        timer.then(function (timing) {
+            _this.logger.logKernelProfile(kernelName, result, vals, timing.kernelMs);
+        });
+        return result;
+    };
+    return Profiler;
+}());
+exports.Profiler = Profiler;
+var Logger = (function () {
+    function Logger() {
+    }
+    Logger.prototype.logKernelProfile = function (kernelName, result, vals, timeMs) {
+        var time = util.rightPad(timeMs + "ms", 9);
+        var paddedName = util.rightPad(kernelName, 25);
+        var rank = result.rank;
+        var size = result.size;
+        var shape = util.rightPad(result.shape.toString(), 14);
+        console.log("%c" + paddedName + "\t%c" + time + "\t%c" + rank + "D " + shape + "\t%c" + size, 'font-weight:bold', 'color:red', 'color:blue', 'color: orange');
+    };
+    return Logger;
+}());
+exports.Logger = Logger;
 
-},{}],99:[function(require,module,exports){
+},{"./util":151}],145:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var util = require("./util");
+var tensor_1 = require("./tensor");
+function getFilteredNodesXToY(tape, xs, y) {
+    var tensorsFromX = {};
+    var nodesFromX = {};
+    for (var i = 0; i < xs.length; i++) {
+        tensorsFromX[xs[i].id] = true;
+    }
+    for (var i = 0; i < tape.length; i++) {
+        var node = tape[i];
+        var nodeInputs = node.inputAndArgs.inputs;
+        for (var inputName in nodeInputs) {
+            var input = nodeInputs[inputName];
+            var anyInputFromX = false;
+            for (var j = 0; j < xs.length; j++) {
+                if (tensorsFromX[input.id]) {
+                    if (node.output instanceof tensor_1.Tensor) {
+                        tensorsFromX[node.output.id] = true;
+                    }
+                    else {
+                        var keys = Object.keys(node.output);
+                        for (var _i = 0, keys_1 = keys; _i < keys_1.length; _i++) {
+                            var key = keys_1[_i];
+                            tensorsFromX[node.output[key].id] = true;
+                        }
+                    }
+                    anyInputFromX = true;
+                    nodesFromX[node.id] = true;
+                    break;
+                }
+            }
+            if (anyInputFromX) {
+                break;
+            }
+        }
+    }
+    var tensorsLeadToY = {};
+    tensorsLeadToY[y.id] = true;
+    var nodesToY = {};
+    for (var i = tape.length - 1; i >= 0; i--) {
+        var node = tape[i];
+        var nodeInputs = node.inputAndArgs.inputs;
+        var outputs = [];
+        if (node.output instanceof tensor_1.Tensor) {
+            outputs.push(node.output);
+        }
+        else {
+            var keys = Object.keys(node.output);
+            for (var _a = 0, keys_2 = keys; _a < keys_2.length; _a++) {
+                var key = keys_2[_a];
+                outputs.push(node.output[key]);
+            }
+        }
+        for (var j = 0; j < outputs.length; j++) {
+            if (tensorsLeadToY[outputs[j].id]) {
+                for (var inputName in nodeInputs) {
+                    tensorsLeadToY[nodeInputs[inputName].id] = true;
+                    nodesToY[node.id] = true;
+                }
+                break;
+            }
+        }
+    }
+    var filteredTape = [];
+    for (var i = 0; i < tape.length; i++) {
+        var node = tape[i];
+        if (nodesFromX[node.id] && nodesToY[node.id]) {
+            var prunedInputs = {};
+            for (var inputName in node.inputAndArgs.inputs) {
+                var nodeInput = node.inputAndArgs.inputs[inputName];
+                if (tensorsFromX[nodeInput.id]) {
+                    prunedInputs[inputName] = nodeInput;
+                }
+            }
+            var prunedOutputs = void 0;
+            if (node.output instanceof tensor_1.Tensor) {
+                prunedOutputs = node.output;
+            }
+            else {
+                prunedOutputs = {};
+                for (var outputName in node.output) {
+                    var output = node.output[outputName];
+                    if (tensorsLeadToY[output.id]) {
+                        prunedOutputs[outputName] = node.output[outputName];
+                    }
+                }
+            }
+            var prunedNode = Object.assign({}, node);
+            prunedNode.inputAndArgs = { inputs: prunedInputs };
+            prunedNode.output = prunedOutputs;
+            filteredTape.push(prunedNode);
+        }
+    }
+    return filteredTape;
+}
+exports.getFilteredNodesXToY = getFilteredNodesXToY;
+function backpropagateGradients(tensorAccumulatedGradientMap, filteredTape) {
+    for (var i = filteredTape.length - 1; i >= 0; i--) {
+        var node = filteredTape[i];
+        var dy = void 0;
+        if (node.output instanceof tensor_1.Tensor) {
+            dy = tensorAccumulatedGradientMap[node.output.id];
+        }
+        else {
+            dy = {};
+            var keys = Object.keys(node.output);
+            for (var _i = 0, keys_3 = keys; _i < keys_3.length; _i++) {
+                var key = keys_3[_i];
+                dy[key] = tensorAccumulatedGradientMap[node.output[key].id];
+            }
+        }
+        if (node.gradient == null) {
+            throw new Error("Cannot compute gradient: gradient function not found " +
+                ("for " + node.name + "."));
+        }
+        var inputGradients = node.gradient(dy, node.output);
+        for (var inputName in node.inputAndArgs.inputs) {
+            if (!(inputName in inputGradients)) {
+                throw new Error("Cannot backprop through input " + inputName + ". " +
+                    ("Available gradients found: " + Object.keys(inputGradients) + "."));
+            }
+            var dx = inputGradients[inputName]();
+            var x = node.inputAndArgs.inputs[inputName];
+            if (!util.arraysEqual(dx.shape, x.shape)) {
+                throw new Error("Error in gradient for op " + node.name + ". The gradient of input " +
+                    ("'" + inputName + "' has shape '" + dx.shape + "', which does not match ") +
+                    ("the shape of the input '" + x.shape + "'"));
+            }
+            if (tensorAccumulatedGradientMap[x.id] == null) {
+                tensorAccumulatedGradientMap[x.id] = dx;
+            }
+            else {
+                var curGradient = tensorAccumulatedGradientMap[x.id];
+                tensorAccumulatedGradientMap[x.id] = curGradient.add(dx);
+                curGradient.dispose();
+            }
+        }
+    }
+}
+exports.backpropagateGradients = backpropagateGradients;
+function extractTensorsFromScopeResult(result) {
+    if (result == null) {
+        return [];
+    }
+    if (result instanceof tensor_1.Tensor) {
+        return [result];
+    }
+    var list = [];
+    var resultObj = result;
+    for (var k in resultObj) {
+        var sublist = util.flatten(resultObj[k]).filter(function (x) { return x instanceof tensor_1.Tensor; });
+        list.push.apply(list, sublist);
+    }
+    return list;
+}
+exports.extractTensorsFromScopeResult = extractTensorsFromScopeResult;
+function stripUndefinedInputsFromInputConfig(config) {
+    var keys = Object.keys(config.inputs);
+    keys.forEach(function (key) {
+        if (config.inputs[key] == null) {
+            delete config.inputs[key];
+        }
+    });
+    return config;
+}
+exports.stripUndefinedInputsFromInputConfig = stripUndefinedInputsFromInputConfig;
+
+},{"./tensor":146,"./util":151}],146:[function(require,module,exports){
+"use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = y[op[0] & 2 ? "return" : op[0] ? "throw" : "next"]) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [0, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("./doc");
+var environment_1 = require("./environment");
+var ops = require("./ops/ops");
+var util = require("./util");
+var TensorBuffer = (function () {
+    function TensorBuffer(shape, dtype, values) {
+        this.shape = shape;
+        this.dtype = dtype;
+        this.values = values;
+        if (values != null) {
+            var n = values.length;
+            var size = util.sizeFromShape(shape);
+            util.assert(n === size, "Length of values '" + n + "' does not match the size " +
+                ("inferred by the shape '" + size + "'"));
+        }
+        this.values =
+            values || util.getTypedArrayFromDType(dtype, util.sizeFromShape(shape));
+        this.strides = computeStrides(shape);
+    }
+    TensorBuffer.prototype.set = function (value) {
+        var locs = [];
+        for (var _i = 1; _i < arguments.length; _i++) {
+            locs[_i - 1] = arguments[_i];
+        }
+        if (locs.length === 0) {
+            locs = [0];
+        }
+        util.assert(locs.length === this.rank, "The number of provided coordinates (" + locs.length + ") must " +
+            ("match the rank (" + this.rank + ")"));
+        var index = this.locToIndex(locs);
+        this.values[index] = value;
+    };
+    TensorBuffer.prototype.get = function () {
+        var locs = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            locs[_i] = arguments[_i];
+        }
+        if (locs.length === 0) {
+            locs = [0];
+        }
+        var index = locs[locs.length - 1];
+        for (var i = 0; i < locs.length - 1; ++i) {
+            index += this.strides[i] * locs[i];
+        }
+        return this.values[index];
+    };
+    TensorBuffer.prototype.locToIndex = function (locs) {
+        if (this.rank === 0) {
+            return 0;
+        }
+        else if (this.rank === 1) {
+            return locs[0];
+        }
+        var index = locs[locs.length - 1];
+        for (var i = 0; i < locs.length - 1; ++i) {
+            index += this.strides[i] * locs[i];
+        }
+        return index;
+    };
+    TensorBuffer.prototype.indexToLoc = function (index) {
+        if (this.rank === 0) {
+            return [];
+        }
+        else if (this.rank === 1) {
+            return [index];
+        }
+        var locs = new Array(this.shape.length);
+        for (var i = 0; i < locs.length - 1; ++i) {
+            locs[i] = Math.floor(index / this.strides[i]);
+            index -= locs[i] * this.strides[i];
+        }
+        locs[locs.length - 1] = index;
+        return locs;
+    };
+    Object.defineProperty(TensorBuffer.prototype, "rank", {
+        get: function () {
+            return this.shape.length;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    TensorBuffer.prototype.toTensor = function () {
+        return Tensor.make(this.shape, { values: this.values }, this.dtype);
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], TensorBuffer.prototype, "set", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], TensorBuffer.prototype, "get", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], TensorBuffer.prototype, "toTensor", null);
+    TensorBuffer = __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], TensorBuffer);
+    return TensorBuffer;
+}());
+exports.TensorBuffer = TensorBuffer;
+var Tensor = (function () {
+    function Tensor(shape, dtype, values, dataId) {
+        this.isDisposed = false;
+        this.size = util.sizeFromShape(shape);
+        if (values != null) {
+            util.assert(this.size === values.length, "Constructing tensor of shape (" + this.size + ") should match the " +
+                ("length of values (" + values.length + ")"));
+        }
+        this.shape = shape;
+        this.dtype = dtype || 'float32';
+        this.strides = computeStrides(shape);
+        this.dataId = dataId != null ? dataId : {};
+        this.id = Tensor_1.nextId++;
+        this.rankType = (this.rank < 5 ? this.rank.toString() : 'higher');
+        environment_1.ENV.engine.registerTensor(this);
+        if (values != null) {
+            environment_1.ENV.engine.write(this.dataId, values);
+        }
+    }
+    Tensor_1 = Tensor;
+    Tensor.ones = function (shape, dtype) {
+        return ops.ones(shape, dtype);
+    };
+    Tensor.zeros = function (shape, dtype) {
+        return ops.zeros(shape, dtype);
+    };
+    Tensor.onesLike = function (x) {
+        return ops.onesLike(x);
+    };
+    Tensor.zerosLike = function (x) {
+        return ops.zerosLike(x);
+    };
+    Tensor.like = function (x) {
+        return ops.clone(x);
+    };
+    Tensor.make = function (shape, data, dtype) {
+        return new Tensor_1(shape, dtype, data.values, data.dataId);
+    };
+    Tensor.fromPixels = function (pixels, numChannels) {
+        if (numChannels === void 0) { numChannels = 3; }
+        return ops.fromPixels(pixels, numChannels);
+    };
+    Tensor.rand = function (shape, randFunction, dtype) {
+        return ops.rand(shape, randFunction, dtype);
+    };
+    Tensor.randNormal = function (shape, mean, stdDev, dtype, seed) {
+        if (mean === void 0) { mean = 0; }
+        if (stdDev === void 0) { stdDev = 1; }
+        return ops.randomNormal(shape, mean, stdDev, dtype, seed);
+    };
+    Tensor.randTruncatedNormal = function (shape, mean, stdDev, dtype, seed) {
+        if (mean === void 0) { mean = 0; }
+        if (stdDev === void 0) { stdDev = 1; }
+        return ops.truncatedNormal(shape, mean, stdDev, dtype, seed);
+    };
+    Tensor.randUniform = function (shape, a, b, dtype) {
+        return ops.randomUniform(shape, a, b, dtype);
+    };
+    Tensor.prototype.flatten = function () {
+        this.throwIfDisposed();
+        return this.as1D();
+    };
+    Tensor.prototype.asScalar = function () {
+        this.throwIfDisposed();
+        util.assert(this.size === 1, 'The array must have only 1 element.');
+        return this.reshape([]);
+    };
+    Tensor.prototype.as1D = function () {
+        this.throwIfDisposed();
+        return this.reshape([this.size]);
+    };
+    Tensor.prototype.as2D = function (rows, columns) {
+        this.throwIfDisposed();
+        return this.reshape([rows, columns]);
+    };
+    Tensor.prototype.as3D = function (rows, columns, depth) {
+        this.throwIfDisposed();
+        return this.reshape([rows, columns, depth]);
+    };
+    Tensor.prototype.as4D = function (rows, columns, depth, depth2) {
+        this.throwIfDisposed();
+        return this.reshape([rows, columns, depth, depth2]);
+    };
+    Tensor.prototype.asType = function (dtype) {
+        this.throwIfDisposed();
+        return ops.cast(this, dtype);
+    };
+    Object.defineProperty(Tensor.prototype, "rank", {
+        get: function () {
+            return this.shape.length;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Tensor.prototype.get = function () {
+        var locs = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            locs[_i] = arguments[_i];
+        }
+        this.throwIfDisposed();
+        if (locs.length === 0) {
+            locs = [0];
+        }
+        var index = locs[locs.length - 1];
+        for (var i = 0; i < locs.length - 1; ++i) {
+            index += this.strides[i] * locs[i];
+        }
+        return this.dataSync()[index];
+    };
+    Tensor.prototype.val = function () {
+        var locs = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            locs[_i] = arguments[_i];
+        }
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (locs.length === 0) {
+                            locs = [0];
+                        }
+                        this.throwIfDisposed();
+                        return [4, this.data()];
+                    case 1:
+                        _a.sent();
+                        return [2, this.get.apply(this, locs)];
+                }
+            });
+        });
+    };
+    Tensor.prototype.locToIndex = function (locs) {
+        this.throwIfDisposed();
+        if (this.rank === 0) {
+            return 0;
+        }
+        else if (this.rank === 1) {
+            return locs[0];
+        }
+        var index = locs[locs.length - 1];
+        for (var i = 0; i < locs.length - 1; ++i) {
+            index += this.strides[i] * locs[i];
+        }
+        return index;
+    };
+    Tensor.prototype.indexToLoc = function (index) {
+        this.throwIfDisposed();
+        if (this.rank === 0) {
+            return [];
+        }
+        else if (this.rank === 1) {
+            return [index];
+        }
+        var locs = new Array(this.shape.length);
+        for (var i = 0; i < locs.length - 1; ++i) {
+            locs[i] = Math.floor(index / this.strides[i]);
+            index -= locs[i] * this.strides[i];
+        }
+        locs[locs.length - 1] = index;
+        return locs;
+    };
+    Tensor.prototype.getValues = function () {
+        return this.dataSync();
+    };
+    Tensor.prototype.getValuesAsync = function () {
+        return this.data();
+    };
+    Tensor.prototype.buffer = function () {
+        return ops.buffer(this.shape, this.dtype, this.dataSync());
+    };
+    Tensor.prototype.data = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                this.throwIfDisposed();
+                return [2, environment_1.ENV.engine.read(this.dataId)];
+            });
+        });
+    };
+    Tensor.prototype.dataSync = function () {
+        this.throwIfDisposed();
+        return environment_1.ENV.engine.readSync(this.dataId);
+    };
+    Tensor.prototype.dispose = function () {
+        if (this.isDisposed) {
+            return;
+        }
+        this.isDisposed = true;
+        environment_1.ENV.engine.disposeTensor(this);
+    };
+    Tensor.prototype.throwIfDisposed = function () {
+        if (this.isDisposed) {
+            throw new Error("Tensor is disposed.");
+        }
+    };
+    Tensor.prototype.toFloat = function () {
+        return this.asType('float32');
+    };
+    Tensor.prototype.toInt = function () {
+        return this.asType('int32');
+    };
+    Tensor.prototype.toBool = function () {
+        return this.asType('bool');
+    };
+    Tensor.prototype.print = function (verbose) {
+        if (verbose === void 0) { verbose = false; }
+        return ops.print(this, verbose);
+    };
+    Tensor.prototype.reshape = function (newShape) {
+        this.throwIfDisposed();
+        return ops.reshape(this, newShape);
+    };
+    Tensor.prototype.reshapeAs = function (x) {
+        this.throwIfDisposed();
+        return this.reshape(x.shape);
+    };
+    Tensor.prototype.expandDims = function (axis) {
+        if (axis === void 0) { axis = 0; }
+        return ops.expandDims(this, axis);
+    };
+    Tensor.prototype.squeeze = function (axis) {
+        this.throwIfDisposed();
+        return ops.squeeze(this, axis);
+    };
+    Tensor.prototype.clone = function () {
+        this.throwIfDisposed();
+        return ops.clone(this);
+    };
+    Tensor.prototype.tile = function (reps) {
+        this.throwIfDisposed();
+        return ops.tile(this, reps);
+    };
+    Tensor.prototype.gather = function (indices, axis) {
+        if (axis === void 0) { axis = 0; }
+        this.throwIfDisposed();
+        return ops.gather(this, indices);
+    };
+    Tensor.prototype.matMul = function (b, transposeA, transposeB) {
+        if (transposeA === void 0) { transposeA = false; }
+        if (transposeB === void 0) { transposeB = false; }
+        this.throwIfDisposed();
+        return ops.matMul(this, b, transposeA, transposeB);
+    };
+    Tensor.prototype.norm = function (ord, axis, keepDims) {
+        if (ord === void 0) { ord = 'euclidean'; }
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        this.throwIfDisposed();
+        return ops.norm(this, ord, axis, keepDims);
+    };
+    Tensor.prototype.slice = function (begin, size) {
+        this.throwIfDisposed();
+        return ops.slice(this, begin, size);
+    };
+    Tensor.prototype.reverse = function (axis) {
+        this.throwIfDisposed();
+        return ops.reverse(this, axis);
+    };
+    Tensor.prototype.concat = function (x, axis) {
+        if (axis === void 0) { axis = 0; }
+        this.throwIfDisposed();
+        return ops.concat([this, x], axis);
+    };
+    Tensor.prototype.stack = function (x, axis) {
+        if (axis === void 0) { axis = 0; }
+        return ops.stack([this, x], axis);
+    };
+    Tensor.prototype.pad = function (paddings, constantValue) {
+        if (constantValue === void 0) { constantValue = 0; }
+        return ops.pad(this, paddings, constantValue);
+    };
+    Tensor.prototype.batchNormalization = function (mean, variance, varianceEpsilon, scale, offset) {
+        if (varianceEpsilon === void 0) { varianceEpsilon = .001; }
+        this.throwIfDisposed();
+        return ops.batchNormalization(this, mean, variance, varianceEpsilon, scale, offset);
+    };
+    Tensor.prototype.logSumExp = function (axis, keepDims) {
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        this.throwIfDisposed();
+        return ops.logSumExp(this, axis, keepDims);
+    };
+    Tensor.prototype.sum = function (axis, keepDims) {
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        this.throwIfDisposed();
+        return ops.sum(this, axis, keepDims);
+    };
+    Tensor.prototype.mean = function (axis, keepDims) {
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        this.throwIfDisposed();
+        return ops.mean(this, axis, keepDims);
+    };
+    Tensor.prototype.min = function (axis, keepDims) {
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        this.throwIfDisposed();
+        return ops.min(this, axis, keepDims);
+    };
+    Tensor.prototype.max = function (axis, keepDims) {
+        if (axis === void 0) { axis = null; }
+        if (keepDims === void 0) { keepDims = false; }
+        this.throwIfDisposed();
+        return ops.max(this, axis, keepDims);
+    };
+    Tensor.prototype.argMin = function (axis) {
+        if (axis === void 0) { axis = null; }
+        this.throwIfDisposed();
+        return ops.argMin(this, axis);
+    };
+    Tensor.prototype.argMax = function (axis) {
+        if (axis === void 0) { axis = null; }
+        this.throwIfDisposed();
+        return ops.argMax(this, axis);
+    };
+    Tensor.prototype.add = function (x) {
+        this.throwIfDisposed();
+        return ops.add(this, x);
+    };
+    Tensor.prototype.addStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.addStrict(this, x);
+    };
+    Tensor.prototype.sub = function (x) {
+        this.throwIfDisposed();
+        return ops.sub(this, x);
+    };
+    Tensor.prototype.subStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.subStrict(this, x);
+    };
+    Tensor.prototype.pow = function (exp) {
+        this.throwIfDisposed();
+        return ops.pow(this, exp);
+    };
+    Tensor.prototype.powStrict = function (exp) {
+        this.throwIfDisposed();
+        return ops.powStrict(this, exp);
+    };
+    Tensor.prototype.mul = function (x) {
+        this.throwIfDisposed();
+        return ops.mul(this, x);
+    };
+    Tensor.prototype.mulStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.mulStrict(this, x);
+    };
+    Tensor.prototype.div = function (x) {
+        this.throwIfDisposed();
+        return ops.div(this, x);
+    };
+    Tensor.prototype.divStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.divStrict(this, x);
+    };
+    Tensor.prototype.minimum = function (x) {
+        this.throwIfDisposed();
+        return ops.minimum(this, x);
+    };
+    Tensor.prototype.minimumStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.minimumStrict(this, x);
+    };
+    Tensor.prototype.maximum = function (x) {
+        this.throwIfDisposed();
+        return ops.maximum(this, x);
+    };
+    Tensor.prototype.maximumStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.maximumStrict(this, x);
+    };
+    Tensor.prototype.transpose = function (perm) {
+        this.throwIfDisposed();
+        return ops.transpose(this, perm);
+    };
+    Tensor.prototype.notEqual = function (x) {
+        this.throwIfDisposed();
+        return ops.notEqual(this, x);
+    };
+    Tensor.prototype.notEqualStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.notEqualStrict(this, x);
+    };
+    Tensor.prototype.less = function (x) {
+        this.throwIfDisposed();
+        return ops.less(this, x);
+    };
+    Tensor.prototype.lessStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.lessStrict(this, x);
+    };
+    Tensor.prototype.equal = function (x) {
+        this.throwIfDisposed();
+        return ops.equal(this, x);
+    };
+    Tensor.prototype.equalStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.equalStrict(this, x);
+    };
+    Tensor.prototype.lessEqual = function (x) {
+        this.throwIfDisposed();
+        return ops.lessEqual(this, x);
+    };
+    Tensor.prototype.lessEqualStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.lessEqualStrict(this, x);
+    };
+    Tensor.prototype.greater = function (x) {
+        this.throwIfDisposed();
+        return ops.greater(this, x);
+    };
+    Tensor.prototype.greaterStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.greaterStrict(this, x);
+    };
+    Tensor.prototype.greaterEqual = function (x) {
+        this.throwIfDisposed();
+        return ops.greaterEqual(this, x);
+    };
+    Tensor.prototype.greaterEqualStrict = function (x) {
+        this.throwIfDisposed();
+        return ops.greaterEqualStrict(this, x);
+    };
+    Tensor.prototype.logicalAnd = function (x) {
+        this.throwIfDisposed();
+        return ops.logicalAnd(this, x);
+    };
+    Tensor.prototype.logicalOr = function (x) {
+        this.throwIfDisposed();
+        return ops.logicalOr(this, x);
+    };
+    Tensor.prototype.logicalXor = function (x) {
+        this.throwIfDisposed();
+        return ops.logicalXor(this, x);
+    };
+    Tensor.prototype.where = function (condition, x) {
+        this.throwIfDisposed();
+        return ops.where(condition, this, x);
+    };
+    Tensor.prototype.neg = function () {
+        this.throwIfDisposed();
+        return ops.neg(this);
+    };
+    Tensor.prototype.ceil = function () {
+        this.throwIfDisposed();
+        return ops.ceil(this);
+    };
+    Tensor.prototype.floor = function () {
+        this.throwIfDisposed();
+        return ops.floor(this);
+    };
+    Tensor.prototype.exp = function () {
+        this.throwIfDisposed();
+        return ops.exp(this);
+    };
+    Tensor.prototype.log = function () {
+        this.throwIfDisposed();
+        return ops.log(this);
+    };
+    Tensor.prototype.sqrt = function () {
+        this.throwIfDisposed();
+        return ops.sqrt(this);
+    };
+    Tensor.prototype.square = function () {
+        this.throwIfDisposed();
+        return ops.square(this);
+    };
+    Tensor.prototype.abs = function () {
+        this.throwIfDisposed();
+        return ops.abs(this);
+    };
+    Tensor.prototype.clipByValue = function (min, max) {
+        this.throwIfDisposed();
+        return ops.clipByValue(this, min, max);
+    };
+    Tensor.prototype.relu = function () {
+        this.throwIfDisposed();
+        return ops.relu(this);
+    };
+    Tensor.prototype.elu = function () {
+        this.throwIfDisposed();
+        return ops.elu(this);
+    };
+    Tensor.prototype.selu = function () {
+        this.throwIfDisposed();
+        return ops.selu(this);
+    };
+    Tensor.prototype.leakyRelu = function (alpha) {
+        if (alpha === void 0) { alpha = 0.2; }
+        this.throwIfDisposed();
+        return ops.leakyRelu(this, alpha);
+    };
+    Tensor.prototype.prelu = function (alpha) {
+        this.throwIfDisposed();
+        return ops.prelu(this, alpha);
+    };
+    Tensor.prototype.sigmoid = function () {
+        this.throwIfDisposed();
+        return ops.sigmoid(this);
+    };
+    Tensor.prototype.sin = function () {
+        this.throwIfDisposed();
+        return ops.sin(this);
+    };
+    Tensor.prototype.cos = function () {
+        this.throwIfDisposed();
+        return ops.cos(this);
+    };
+    Tensor.prototype.tan = function () {
+        this.throwIfDisposed();
+        return ops.tan(this);
+    };
+    Tensor.prototype.asin = function () {
+        this.throwIfDisposed();
+        return ops.asin(this);
+    };
+    Tensor.prototype.acos = function () {
+        this.throwIfDisposed();
+        return ops.acos(this);
+    };
+    Tensor.prototype.atan = function () {
+        this.throwIfDisposed();
+        return ops.atan(this);
+    };
+    Tensor.prototype.sinh = function () {
+        this.throwIfDisposed();
+        return ops.sinh(this);
+    };
+    Tensor.prototype.cosh = function () {
+        this.throwIfDisposed();
+        return ops.cosh(this);
+    };
+    Tensor.prototype.tanh = function () {
+        this.throwIfDisposed();
+        return ops.tanh(this);
+    };
+    Tensor.prototype.step = function (alpha) {
+        if (alpha === void 0) { alpha = 0.0; }
+        this.throwIfDisposed();
+        return ops.step(this, alpha);
+    };
+    Tensor.prototype.softmax = function (dim) {
+        if (dim === void 0) { dim = -1; }
+        this.throwIfDisposed();
+        return ops.softmax(this, dim);
+    };
+    Tensor.prototype.resizeBilinear = function (newShape2D, alignCorners) {
+        if (alignCorners === void 0) { alignCorners = false; }
+        this.throwIfDisposed();
+        return ops.image.resizeBilinear(this, newShape2D, alignCorners);
+    };
+    Tensor.prototype.conv1d = function (filter, stride, pad, dimRoundingMode) {
+        this.throwIfDisposed();
+        return ops.conv1d(this, filter, stride, pad, dimRoundingMode);
+    };
+    Tensor.prototype.conv2d = function (filter, strides, pad, dimRoundingMode) {
+        this.throwIfDisposed();
+        return ops.conv2d(this, filter, strides, pad, dimRoundingMode);
+    };
+    Tensor.prototype.conv2dTranspose = function (filter, outputShape, strides, pad, dimRoundingMode) {
+        this.throwIfDisposed();
+        return ops.conv2dTranspose(this, filter, outputShape, strides, pad, dimRoundingMode);
+    };
+    Tensor.prototype.depthwiseConv2D = function (filter, strides, pad, rates, dimRoundingMode) {
+        if (rates === void 0) { rates = [1, 1]; }
+        this.throwIfDisposed();
+        return ops.depthwiseConv2d(this, filter, strides, pad, rates, dimRoundingMode);
+    };
+    Tensor.prototype.avgPool = function (filterSize, strides, pad, dimRoundingMode) {
+        this.throwIfDisposed();
+        return ops.avgPool(this, filterSize, strides, pad, dimRoundingMode);
+    };
+    Tensor.prototype.maxPool = function (filterSize, strides, pad, dimRoundingMode) {
+        this.throwIfDisposed();
+        return ops.maxPool(this, filterSize, strides, pad, dimRoundingMode);
+    };
+    Tensor.prototype.minPool = function (filterSize, strides, pad, dimRoundingMode) {
+        this.throwIfDisposed();
+        return ops.minPool(this, filterSize, strides, pad, dimRoundingMode);
+    };
+    Tensor.prototype.localResponseNormalization = function (radius, bias, alpha, beta, normRegion) {
+        if (radius === void 0) { radius = 5; }
+        if (bias === void 0) { bias = 1; }
+        if (alpha === void 0) { alpha = 1; }
+        if (beta === void 0) { beta = 0.5; }
+        if (normRegion === void 0) { normRegion = 'acrossChannels'; }
+        return ops.localResponseNormalization(this, radius, bias, alpha, beta, normRegion);
+    };
+    Tensor.prototype.variable = function (trainable, name, dtype) {
+        if (trainable === void 0) { trainable = true; }
+        this.throwIfDisposed();
+        return Variable.variable(this, trainable, name, dtype);
+    };
+    Tensor.nextId = 0;
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "flatten", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "asScalar", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "as1D", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "as2D", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "as3D", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "as4D", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "asType", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "buffer", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "data", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "dataSync", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "dispose", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "toFloat", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "toInt", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "toBool", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "print", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "reshape", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "reshapeAs", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "expandDims", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "squeeze", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor.prototype, "clone", null);
+    Tensor = Tensor_1 = __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Tensor);
+    return Tensor;
+    var Tensor_1;
+}());
+exports.Tensor = Tensor;
+exports.NDArray = Tensor;
+var Scalar = (function (_super) {
+    __extends(Scalar, _super);
+    function Scalar() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    Scalar.new = function (value, dtype) {
+        return ops.scalar(value, dtype);
+    };
+    return Scalar;
+}(Tensor));
+exports.Scalar = Scalar;
+var Tensor1D = (function (_super) {
+    __extends(Tensor1D, _super);
+    function Tensor1D() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    Tensor1D.new = function (values, dtype) {
+        return ops.tensor1d(values, dtype);
+    };
+    return Tensor1D;
+}(Tensor));
+exports.Tensor1D = Tensor1D;
+exports.Array1D = Tensor1D;
+var Tensor2D = (function (_super) {
+    __extends(Tensor2D, _super);
+    function Tensor2D() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    Tensor2D.new = function (shape, values, dtype) {
+        return ops.tensor2d(values, shape, dtype);
+    };
+    return Tensor2D;
+}(Tensor));
+exports.Tensor2D = Tensor2D;
+exports.Array2D = Tensor2D;
+var Tensor3D = (function (_super) {
+    __extends(Tensor3D, _super);
+    function Tensor3D() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    Tensor3D.new = function (shape, values, dtype) {
+        return ops.tensor3d(values, shape, dtype);
+    };
+    return Tensor3D;
+}(Tensor));
+exports.Tensor3D = Tensor3D;
+exports.Array3D = Tensor3D;
+var Tensor4D = (function (_super) {
+    __extends(Tensor4D, _super);
+    function Tensor4D() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    Tensor4D.new = function (shape, values, dtype) {
+        return ops.tensor4d(values, shape, dtype);
+    };
+    return Tensor4D;
+}(Tensor));
+exports.Tensor4D = Tensor4D;
+exports.Array4D = Tensor4D;
+var Variable = (function (_super) {
+    __extends(Variable, _super);
+    function Variable(initialValue, trainable, name) {
+        if (trainable === void 0) { trainable = true; }
+        var _this = _super.call(this, initialValue.shape, initialValue.dtype, null, initialValue.dataId) || this;
+        _this.trainable = trainable;
+        _this.name = name;
+        if (_this.name == null) {
+            _this.name = Variable_1.nextVarId.toString();
+            Variable_1.nextVarId++;
+        }
+        environment_1.ENV.engine.registerVariable(_this);
+        return _this;
+    }
+    Variable_1 = Variable;
+    Variable.variable = function (initialValue, trainable, name, dtype) {
+        if (trainable === void 0) { trainable = true; }
+        if (dtype != null && dtype !== initialValue.dtype) {
+            initialValue = initialValue.asType(dtype);
+        }
+        return new Variable_1(initialValue, trainable, name);
+    };
+    Variable.prototype.assign = function (newValue) {
+        if (newValue.dtype !== this.dtype) {
+            throw new Error("dtype of the new value (" + newValue.dtype + ") and " +
+                ("previous value (" + this.dtype + ") must match"));
+        }
+        if (!util.arraysEqual(newValue.shape, this.shape)) {
+            throw new Error("shape of the new value (" + newValue.shape + ") and " +
+                ("previous value (" + this.shape + ") must match"));
+        }
+        environment_1.ENV.engine.disposeTensor(this);
+        this.dataId = newValue.dataId;
+        environment_1.ENV.engine.registerTensor(this);
+    };
+    Variable.nextVarId = 0;
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Variable.prototype, "assign", null);
+    __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Creation' })
+    ], Variable, "variable", null);
+    Variable = Variable_1 = __decorate([
+        doc_1.doc({ heading: 'Tensors', subheading: 'Classes' })
+    ], Variable);
+    return Variable;
+    var Variable_1;
+}(Tensor));
+exports.Variable = Variable;
+var variable = Variable.variable;
+exports.variable = variable;
+function computeStrides(shape) {
+    var rank = shape.length;
+    if (rank < 2) {
+        return [];
+    }
+    var strides = new Array(rank - 1);
+    strides[rank - 2] = shape[rank - 1];
+    for (var i = rank - 3; i >= 0; --i) {
+        strides[i] = strides[i + 1] * shape[i + 1];
+    }
+    return strides;
+}
+
+},{"./doc":32,"./environment":34,"./ops/ops":123,"./util":151}],147:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var environment_1 = require("./environment");
-var backend_cpu_1 = require("./math/backends/backend_cpu");
-var backend_webgl_1 = require("./math/backends/backend_webgl");
-var math_1 = require("./math/math");
-var ndarray_1 = require("./math/ndarray");
+var backend_cpu_1 = require("./kernels/backend_cpu");
+var backend_webgl_1 = require("./kernels/backend_webgl");
+var tensor_1 = require("./tensor");
 var util = require("./util");
+var WEBGL_FLOAT_ENVS = [
+    { 'BACKEND': 'webgl', 'WEBGL_FLOAT_TEXTURE_ENABLED': true, 'WEBGL_VERSION': 1 },
+    {
+        'BACKEND': 'webgl',
+        'WEBGL_FLOAT_TEXTURE_ENABLED': true,
+        'WEBGL_VERSION': 2
+    }
+];
+exports.WEBGL_ENVS = WEBGL_FLOAT_ENVS.concat([{
+        'BACKEND': 'webgl',
+        'WEBGL_FLOAT_TEXTURE_ENABLED': false,
+        'WEBGL_VERSION': 1
+    }]);
+exports.CPU_ENVS = [{ 'BACKEND': 'cpu' }];
+exports.ALL_FLOAT_ENVS = WEBGL_FLOAT_ENVS.concat(exports.CPU_ENVS);
+exports.ALL_ENVS = exports.WEBGL_ENVS.concat(exports.CPU_ENVS);
 exports.TEST_EPSILON = 1e-2;
-function mean(values) {
-    var sum = 0;
-    for (var i = 0; i < values.length; i++) {
-        sum += values[i];
-    }
-    return sum / values.length;
-}
-exports.mean = mean;
-function standardDeviation(values, mean) {
-    var squareDiffSum = 0;
-    for (var i = 0; i < values.length; i++) {
-        var diff = values[i] - mean;
-        squareDiffSum += diff * diff;
-    }
-    return Math.sqrt(squareDiffSum / values.length);
-}
-exports.standardDeviation = standardDeviation;
-function kurtosis(values) {
-    var valuesMean = mean(values);
-    var n = values.length;
-    var sum2 = 0;
-    var sum4 = 0;
-    for (var i = 0; i < n; i++) {
-        var v = values[i] - valuesMean;
-        sum2 += Math.pow(v, 2);
-        sum4 += Math.pow(v, 4);
-    }
-    return (1 / n) * sum4 / Math.pow((1 / n) * sum2, 2);
-}
-exports.kurtosis = kurtosis;
-function skewness(values) {
-    var valuesMean = mean(values);
-    var n = values.length;
-    var sum2 = 0;
-    var sum3 = 0;
-    for (var i = 0; i < n; i++) {
-        var v = values[i] - valuesMean;
-        sum2 += Math.pow(v, 2);
-        sum3 += Math.pow(v, 3);
-    }
-    return (1 / n) * sum3 / Math.pow((1 / (n - 1)) * sum2, 3 / 2);
-}
-exports.skewness = skewness;
-function jarqueBeraNormalityTest(a) {
-    var values;
-    if (a instanceof ndarray_1.NDArray) {
-        values = a.dataSync();
-    }
-    else {
-        values = a;
-    }
-    var n = values.length;
-    var s = skewness(values);
-    var k = kurtosis(values);
-    var jb = n / 6 * (Math.pow(s, 2) + 0.25 * Math.pow(k - 3, 2));
-    var CHI_SQUARE_2DEG = 5.991;
-    if (jb > CHI_SQUARE_2DEG) {
-        throw new Error("Invalid p-value for JB: " + jb);
-    }
-}
-exports.jarqueBeraNormalityTest = jarqueBeraNormalityTest;
-function expectArrayInMeanStdRange(actual, expectedMean, expectedStdDev, epsilon) {
-    if (epsilon === void 0) { epsilon = exports.TEST_EPSILON; }
-    var actualValues;
-    if (actual instanceof ndarray_1.NDArray) {
-        actualValues = actual.dataSync();
-    }
-    else {
-        actualValues = actual;
-    }
-    var actualMean = mean(actualValues);
-    expectNumbersClose(actualMean, expectedMean, epsilon);
-    expectNumbersClose(standardDeviation(actualValues, actualMean), expectedStdDev, epsilon);
-}
-exports.expectArrayInMeanStdRange = expectArrayInMeanStdRange;
 function expectArraysClose(actual, expected, epsilon) {
     if (epsilon === void 0) { epsilon = exports.TEST_EPSILON; }
-    if (!(actual instanceof ndarray_1.NDArray) && !(expected instanceof ndarray_1.NDArray)) {
+    if (!(actual instanceof tensor_1.Tensor) && !(expected instanceof tensor_1.Tensor)) {
         var aType = actual.constructor.name;
         var bType = expected.constructor.name;
         if (aType !== bType) {
@@ -13489,7 +19143,7 @@ function expectArraysClose(actual, expected, epsilon) {
                 ("vs expected: " + bType));
         }
     }
-    else if (actual instanceof ndarray_1.NDArray && expected instanceof ndarray_1.NDArray) {
+    else if (actual instanceof tensor_1.Tensor && expected instanceof tensor_1.Tensor) {
         if (actual.dtype !== expected.dtype) {
             throw new Error("Arrays are of different type actual: " + actual.dtype + " " +
                 ("vs expected: " + expected.dtype + "."));
@@ -13501,13 +19155,13 @@ function expectArraysClose(actual, expected, epsilon) {
     }
     var actualValues;
     var expectedValues;
-    if (actual instanceof ndarray_1.NDArray) {
+    if (actual instanceof tensor_1.Tensor) {
         actualValues = actual.dataSync();
     }
     else {
         actualValues = actual;
     }
-    if (expected instanceof ndarray_1.NDArray) {
+    if (expected instanceof tensor_1.Tensor) {
         expectedValues = expected.dataSync();
     }
     else {
@@ -13515,15 +19169,17 @@ function expectArraysClose(actual, expected, epsilon) {
     }
     if (actualValues.length !== expectedValues.length) {
         throw new Error("Arrays have different lengths actual: " + actualValues.length + " vs " +
-            ("expected: " + expectedValues.length + "."));
+            ("expected: " + expectedValues.length + ".\n") +
+            ("Actual:   " + actualValues + ".\n") +
+            ("Expected: " + expectedValues + "."));
     }
     for (var i = 0; i < expectedValues.length; ++i) {
         var a = actualValues[i];
         var e = expectedValues[i];
         if (!areClose(a, Number(e), epsilon)) {
-            var actualStr = "actual[" + i + "] === " + a;
-            var expectedStr = "expected[" + i + "] === " + e;
-            throw new Error('Arrays differ: ' + actualStr + ', ' + expectedStr);
+            throw new Error("Arrays differ: actual[" + i + "] = " + a + ", expected[" + i + "] = " + e + ".\n" +
+                ("Actual:   " + actualValues + ".\n") +
+                ("Expected: " + expectedValues + "."));
         }
     }
 }
@@ -13550,7 +19206,7 @@ function areClose(a, e, epsilon) {
 }
 function expectValuesInRange(actual, low, high) {
     var actualVals;
-    if (actual instanceof ndarray_1.NDArray) {
+    if (actual instanceof tensor_1.Tensor) {
         actualVals = actual.dataSync();
     }
     else {
@@ -13563,137 +19219,31 @@ function expectValuesInRange(actual, low, high) {
     }
 }
 exports.expectValuesInRange = expectValuesInRange;
-function randomArrayInRange(n, minValue, maxValue) {
-    var v = new Float32Array(n);
-    var range = maxValue - minValue;
-    for (var i = 0; i < n; ++i) {
-        v[i] = (Math.random() * range) + minValue;
-    }
-    return v;
-}
-exports.randomArrayInRange = randomArrayInRange;
-function makeIdentity(n) {
-    var i = new Float32Array(n * n);
-    for (var j = 0; j < n; ++j) {
-        i[(j * n) + j] = 1;
-    }
-    return i;
-}
-exports.makeIdentity = makeIdentity;
-function cpuMultiplyMatrix(a, aRow, aCol, b, bRow, bCol) {
-    var result = new Float32Array(aRow * bCol);
-    for (var r = 0; r < aRow; ++r) {
-        var aOffset = (r * aCol);
-        var cOffset = (r * bCol);
-        for (var c = 0; c < bCol; ++c) {
-            var d = 0;
-            for (var k = 0; k < aCol; ++k) {
-                d += a[aOffset + k] * b[(k * bCol) + c];
-            }
-            result[cOffset + c] = d;
-        }
-    }
-    return result;
-}
-exports.cpuMultiplyMatrix = cpuMultiplyMatrix;
-function cpuDotProduct(a, b) {
-    if (a.length !== b.length) {
-        throw new Error('cpuDotProduct: incompatible vectors.');
-    }
-    var d = 0;
-    for (var i = 0; i < a.length; ++i) {
-        d += a[i] * b[i];
-    }
-    return d;
-}
-exports.cpuDotProduct = cpuDotProduct;
-function describeMathCPU(name, tests, featuresList) {
-    var testNameBase = 'CPU: math.' + name;
-    describeWithFeaturesAndExecutor(testNameBase, tests, function (testName, tests, features) { return executeMathTests(testName, tests, function () {
-        var safeMode = true;
-        return new math_1.NDArrayMath(new backend_cpu_1.MathBackendCPU(), safeMode);
-    }, features); }, featuresList);
-}
-exports.describeMathCPU = describeMathCPU;
-function describeMathGPU(name, tests, featuresList) {
-    var testNameBase = 'WebGL: math.' + name;
-    describeWithFeaturesAndExecutor(testNameBase, tests, function (testName, tests, features) { return executeMathTests(testName, tests, function () {
-        var safeMode = true;
-        return new math_1.NDArrayMath(new backend_webgl_1.MathBackendWebGL(), safeMode);
-    }, features); }, featuresList);
-}
-exports.describeMathGPU = describeMathGPU;
-function describeCustom(name, tests, featuresList, customBeforeEach, customAfterEach) {
-    describeWithFeaturesAndExecutor(name, [tests], function (testName, tests, features) { return executeTests(testName, tests, features, customBeforeEach, customAfterEach); }, featuresList);
-}
-exports.describeCustom = describeCustom;
-function describeWithFeaturesAndExecutor(testNameBase, tests, executor, featuresList) {
-    if (featuresList != null) {
-        featuresList.forEach(function (features) {
-            var testName = testNameBase + ' ' + JSON.stringify(features);
-            executor(testName, tests, features);
-        });
-    }
-    else {
-        executor(testNameBase, tests);
-    }
-}
-var PROMISE_IT = function (name, testFunc) {
-    it(name, function (done) {
-        var result = testFunc();
-        if (result instanceof Promise) {
-            result.then(done, function (e) {
-                fail(e);
-                done();
-            });
-        }
-        else {
-            done();
-        }
+function describeWithFlags(name, featuresList, tests) {
+    featuresList.forEach(function (features) {
+        var testName = name + ' ' + JSON.stringify(features);
+        executeTests(testName, tests, features);
     });
-};
-function executeMathTests(testName, tests, mathFactory, features) {
-    var math;
-    var customBeforeEach = function () {
-        math = mathFactory();
-        environment_1.ENV.setMath(math);
-        math.startScope();
-    };
-    var customAfterEach = function () {
-        math.endScope(null);
-        math.dispose();
-    };
-    var customIt = function (name, testFunc) {
-        PROMISE_IT(name, function () { return testFunc(math); });
-    };
-    executeTests(testName, tests, features, customBeforeEach, customAfterEach, customIt);
 }
-exports.executeMathTests = executeMathTests;
-function executeTests(testName, tests, features, customBeforeEach, customAfterEach, customIt) {
-    if (customIt === void 0) { customIt = PROMISE_IT; }
+exports.describeWithFlags = describeWithFlags;
+function executeTests(testName, tests, features) {
     describe(testName, function () {
         beforeEach(function () {
-            if (features != null) {
-                environment_1.ENV.setFeatures(features);
-                environment_1.ENV.registerBackend('webgl', function () { return new backend_webgl_1.MathBackendWebGL(); });
-                environment_1.ENV.registerBackend('cpu', function () { return new backend_cpu_1.MathBackendCPU(); });
+            environment_1.ENV.setFeatures(features || {});
+            environment_1.ENV.addCustomBackend('webgl', function () { return new backend_webgl_1.MathBackendWebGL(); });
+            environment_1.ENV.addCustomBackend('cpu', function () { return new backend_cpu_1.MathBackendCPU(); });
+            if (features && features.BACKEND != null) {
+                environment_1.Environment.setBackend(features.BACKEND);
             }
-            if (customBeforeEach != null) {
-                customBeforeEach();
-            }
+            environment_1.ENV.engine.startScope();
         });
         afterEach(function () {
-            if (customAfterEach != null) {
-                customAfterEach();
-            }
-            if (features != null) {
-                environment_1.ENV.reset();
-            }
+            environment_1.ENV.engine.endScope(null);
+            environment_1.ENV.reset();
         });
-        tests.forEach(function (test) { return test(customIt); });
+        tests();
     });
 }
-exports.executeTests = executeTests;
 function assertIsNan(val, dtype) {
     if (!util.isValNaN(val, dtype)) {
         throw new Error("Value " + val + " does not represent NaN for dtype " + dtype);
@@ -13701,10 +19251,145 @@ function assertIsNan(val, dtype) {
 }
 exports.assertIsNan = assertIsNan;
 
-},{"./environment":15,"./math/backends/backend_cpu":55,"./math/backends/backend_webgl":57,"./math/math":93,"./math/ndarray":94,"./util":100}],100:[function(require,module,exports){
+},{"./environment":34,"./kernels/backend_cpu":68,"./kernels/backend_webgl":69,"./tensor":146,"./util":151}],148:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var doc_1 = require("./doc");
+var environment_1 = require("./environment");
+var Tracking = (function () {
+    function Tracking() {
+    }
+    Tracking.tidy = function (nameOrFn, fn, gradMode) {
+        if (gradMode === void 0) { gradMode = false; }
+        if (fn == null) {
+            if (typeof nameOrFn !== 'function') {
+                throw new Error('Please provide a function to dl.tidy()');
+            }
+            fn = nameOrFn;
+            nameOrFn = '';
+        }
+        else {
+            if (typeof nameOrFn !== 'string' && !(nameOrFn instanceof String)) {
+                throw new Error('When calling with two arguments, the first argument ' +
+                    'to dl.tidy() must be a string');
+            }
+            if (typeof fn !== 'function') {
+                throw new Error('When calling with two arguments, the 2nd argument ' +
+                    'to dl.tidy() must be a function');
+            }
+        }
+        environment_1.ENV.engine.startScope(gradMode);
+        var result = fn();
+        if (result instanceof Promise) {
+            result.then(function (r) { return environment_1.ENV.engine.endScope(r, gradMode); });
+            return result;
+        }
+        else {
+            environment_1.ENV.engine.endScope(result, gradMode);
+            return result;
+        }
+    };
+    Tracking.keep = function (result) {
+        return environment_1.ENV.engine.keep(result);
+    };
+    Tracking.time = function (f) {
+        return environment_1.ENV.engine.time(f);
+    };
+    __decorate([
+        doc_1.doc({ heading: 'Performance', subheading: 'Memory' })
+    ], Tracking, "tidy", null);
+    __decorate([
+        doc_1.doc({ heading: 'Performance', subheading: 'Memory' })
+    ], Tracking, "keep", null);
+    __decorate([
+        doc_1.doc({ heading: 'Performance', subheading: 'Timing' })
+    ], Tracking, "time", null);
+    return Tracking;
+}());
+exports.Tracking = Tracking;
+
+},{"./doc":32,"./environment":34}],149:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var ndarray_1 = require("./math/ndarray");
+var adadelta_optimizer_1 = require("./optimizers/adadelta_optimizer");
+var adagrad_optimizer_1 = require("./optimizers/adagrad_optimizer");
+var adam_optimizer_1 = require("./optimizers/adam_optimizer");
+var adamax_optimizer_1 = require("./optimizers/adamax_optimizer");
+var momentum_optimizer_1 = require("./optimizers/momentum_optimizer");
+var optimizer_constructors_1 = require("./optimizers/optimizer_constructors");
+var rmsprop_optimizer_1 = require("./optimizers/rmsprop_optimizer");
+var sgd_optimizer_1 = require("./optimizers/sgd_optimizer");
+[momentum_optimizer_1.MomentumOptimizer, sgd_optimizer_1.SGDOptimizer, adadelta_optimizer_1.AdadeltaOptimizer, adagrad_optimizer_1.AdagradOptimizer,
+    rmsprop_optimizer_1.RMSPropOptimizer, adamax_optimizer_1.AdamaxOptimizer, adam_optimizer_1.AdamOptimizer];
+exports.train = {
+    sgd: optimizer_constructors_1.OptimizerConstructors.sgd,
+    momentum: optimizer_constructors_1.OptimizerConstructors.momentum,
+    adadelta: optimizer_constructors_1.OptimizerConstructors.adadelta,
+    adagrad: optimizer_constructors_1.OptimizerConstructors.adagrad,
+    rmsprop: optimizer_constructors_1.OptimizerConstructors.rmsprop,
+    adamax: optimizer_constructors_1.OptimizerConstructors.adamax,
+    adam: optimizer_constructors_1.OptimizerConstructors.adam
+};
+
+},{"./optimizers/adadelta_optimizer":135,"./optimizers/adagrad_optimizer":136,"./optimizers/adam_optimizer":137,"./optimizers/adamax_optimizer":138,"./optimizers/momentum_optimizer":139,"./optimizers/optimizer_constructors":141,"./optimizers/rmsprop_optimizer":142,"./optimizers/sgd_optimizer":143}],150:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var DType;
+(function (DType) {
+    DType["float32"] = "float32";
+    DType["int32"] = "int32";
+    DType["bool"] = "bool";
+})(DType = exports.DType || (exports.DType = {}));
+var Rank;
+(function (Rank) {
+    Rank["R0"] = "R0";
+    Rank["R1"] = "R1";
+    Rank["R2"] = "R2";
+    Rank["R3"] = "R3";
+    Rank["R4"] = "R4";
+})(Rank = exports.Rank || (exports.Rank = {}));
+var UpcastInt32AndMap;
+(function (UpcastInt32AndMap) {
+    UpcastInt32AndMap["float32"] = "float32";
+    UpcastInt32AndMap["int32"] = "int32";
+    UpcastInt32AndMap["bool"] = "int32";
+})(UpcastInt32AndMap || (UpcastInt32AndMap = {}));
+var UpcastBoolAndMap;
+(function (UpcastBoolAndMap) {
+    UpcastBoolAndMap["float32"] = "float32";
+    UpcastBoolAndMap["int32"] = "int32";
+    UpcastBoolAndMap["bool"] = "bool";
+})(UpcastBoolAndMap || (UpcastBoolAndMap = {}));
+var UpcastFloat32AndMap;
+(function (UpcastFloat32AndMap) {
+    UpcastFloat32AndMap["float32"] = "float32";
+    UpcastFloat32AndMap["int32"] = "float32";
+    UpcastFloat32AndMap["bool"] = "float32";
+})(UpcastFloat32AndMap || (UpcastFloat32AndMap = {}));
+var upcastTypeMap = {
+    float32: UpcastFloat32AndMap,
+    int32: UpcastInt32AndMap,
+    bool: UpcastBoolAndMap
+};
+function upcastType(typeA, typeB) {
+    return upcastTypeMap[typeA][typeB];
+}
+exports.upcastType = upcastType;
+function sumOutType(type) {
+    return upcastType(type, 'int32');
+}
+exports.sumOutType = sumOutType;
+
+},{}],151:[function(require,module,exports){
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var tensor_1 = require("./tensor");
 function shuffle(array) {
     var counter = array.length;
     var temp = 0;
@@ -13764,11 +19449,17 @@ function flatten(arr, ret) {
     return ret;
 }
 exports.flatten = flatten;
-function inferShape(arr) {
+function inferShape(val) {
+    if (isTypedArray(val)) {
+        return [val.length];
+    }
+    if (!Array.isArray(val)) {
+        return [];
+    }
     var shape = [];
-    while (arr instanceof Array) {
-        shape.push(arr.length);
-        arr = arr[0];
+    while (val instanceof Array) {
+        shape.push(val.length);
+        val = val[0];
     }
     return shape;
 }
@@ -13951,10 +19642,22 @@ function isValNaN(val, dtype) {
     }
 }
 exports.isValNaN = isValNaN;
-function squeezeShape(shape) {
+function squeezeShape(shape, axis) {
     var newShape = [];
     var keptDims = [];
+    var j = 0;
     for (var i = 0; i < shape.length; ++i) {
+        if (axis !== undefined) {
+            if (axis[j] === i && shape[i] > 1) {
+                throw new Error("axis " + i + " is not 1");
+            }
+            if ((axis[j] === undefined || axis[j] > i) && shape[i] === 1) {
+                newShape.push(shape[i]);
+                keptDims.push(i);
+            }
+            if (axis[j] <= i)
+                j++;
+        }
         if (shape[i] > 1) {
             newShape.push(shape[i]);
             keptDims.push(i);
@@ -13980,26 +19683,26 @@ function getTypedArrayFromDType(dtype, size) {
     return values;
 }
 exports.getTypedArrayFromDType = getTypedArrayFromDType;
-function isNDArrayInList(ndarray, ndarrayList) {
-    for (var i = 0; i < ndarrayList.length; i++) {
-        if (ndarrayList[i].id === ndarray.id) {
+function isTensorInList(tensor, tensorList) {
+    for (var i = 0; i < tensorList.length; i++) {
+        if (tensorList[i].id === tensor.id) {
             return true;
         }
     }
     return false;
 }
-exports.isNDArrayInList = isNDArrayInList;
+exports.isTensorInList = isTensorInList;
 function checkForNaN(vals, dtype, name) {
     for (var i = 0; i < vals.length; i++) {
         if (isValNaN(vals[i], dtype)) {
-            throw Error("The result of the last math." + name + " has NaNs.");
+            throw Error("The result of the '" + name + "' has NaNs.");
         }
     }
 }
 exports.checkForNaN = checkForNaN;
 function flattenNameArrayMap(nameArrayMap, keys) {
     var xs = [];
-    if (nameArrayMap instanceof ndarray_1.NDArray) {
+    if (nameArrayMap instanceof tensor_1.Tensor) {
         xs.push(nameArrayMap);
     }
     else {
@@ -14013,7 +19716,7 @@ function flattenNameArrayMap(nameArrayMap, keys) {
 exports.flattenNameArrayMap = flattenNameArrayMap;
 function unflattenToNameArrayMap(keys, flatArrays) {
     if (keys.length !== flatArrays.length) {
-        throw new Error("Cannot unflatten NDArray[], keys and arrays are not of same length.");
+        throw new Error("Cannot unflatten Tensor[], keys and arrays are not of same length.");
     }
     var result = {};
     for (var i = 0; i < keys.length; i++) {
@@ -14022,14 +19725,83 @@ function unflattenToNameArrayMap(keys, flatArrays) {
     return result;
 }
 exports.unflattenToNameArrayMap = unflattenToNameArrayMap;
+function hasEncodingLoss(oldType, newType) {
+    if (newType === 'float32') {
+        return false;
+    }
+    if (newType === 'int32' && oldType !== 'float32') {
+        return false;
+    }
+    if (newType === 'bool' && oldType === 'bool') {
+        return false;
+    }
+    return true;
+}
+exports.hasEncodingLoss = hasEncodingLoss;
+function copyTypedArray(array, dtype) {
+    if (dtype == null || dtype === 'float32') {
+        return new Float32Array(array);
+    }
+    else if (dtype === 'int32') {
+        var vals = new Int32Array(array.length);
+        for (var i = 0; i < vals.length; ++i) {
+            var val = array[i];
+            if (isValNaN(val, 'int32')) {
+                vals[i] = getNaN('int32');
+            }
+            else {
+                vals[i] = val;
+            }
+        }
+        return vals;
+    }
+    else if (dtype === 'bool') {
+        var bool = new Uint8Array(array.length);
+        for (var i = 0; i < bool.length; ++i) {
+            var val = array[i];
+            if (isValNaN(val, 'bool')) {
+                bool[i] = getNaN('bool');
+            }
+            else if (Math.round(val) !== 0) {
+                bool[i] = 1;
+            }
+        }
+        return bool;
+    }
+    else {
+        throw new Error("Unknown data type " + dtype);
+    }
+}
+exports.copyTypedArray = copyTypedArray;
+function isTypedArray(a) {
+    return a instanceof Float32Array || a instanceof Int32Array ||
+        a instanceof Uint8Array;
+}
+exports.isTypedArray = isTypedArray;
+function bytesPerElement(dtype) {
+    if (dtype === 'float32' || dtype === 'int32') {
+        return 4;
+    }
+    else if (dtype === 'bool') {
+        return 1;
+    }
+    else {
+        throw new Error("Unknown dtype " + dtype);
+    }
+}
+exports.bytesPerElement = bytesPerElement;
+function isFunction(f) {
+    return !!(f && f.constructor && f.call && f.apply);
+}
+exports.isFunction = isFunction;
 
-},{"./math/ndarray":94}],101:[function(require,module,exports){
+},{"./tensor":146}],152:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var version = '0.3.17';
+var version = '0.5.0';
 exports.version = version;
 
-},{}],102:[function(require,module,exports){
+},{}],153:[function(require,module,exports){
 // A library of seedable RNGs implemented in Javascript.
 //
 // Usage:
@@ -14091,7 +19863,7 @@ sr.tychei = tychei;
 
 module.exports = sr;
 
-},{"./lib/alea":103,"./lib/tychei":104,"./lib/xor128":105,"./lib/xor4096":106,"./lib/xorshift7":107,"./lib/xorwow":108,"./seedrandom":109}],103:[function(require,module,exports){
+},{"./lib/alea":154,"./lib/tychei":155,"./lib/xor128":156,"./lib/xor4096":157,"./lib/xorshift7":158,"./lib/xorwow":159,"./seedrandom":160}],154:[function(require,module,exports){
 // A port of an algorithm by Johannes Baagøe <baagoe@baagoe.com>, 2010
 // http://baagoe.com/en/RandomMusings/javascript/
 // https://github.com/nquinlan/better-random-numbers-for-javascript-mirror
@@ -14207,7 +19979,7 @@ if (module && module.exports) {
 
 
 
-},{}],104:[function(require,module,exports){
+},{}],155:[function(require,module,exports){
 // A Javascript implementaion of the "Tyche-i" prng algorithm by
 // Samuel Neves and Filipe Araujo.
 // See https://eden.dei.uc.pt/~sneves/pubs/2011-snfa2.pdf
@@ -14312,7 +20084,7 @@ if (module && module.exports) {
 
 
 
-},{}],105:[function(require,module,exports){
+},{}],156:[function(require,module,exports){
 // A Javascript implementaion of the "xor128" prng algorithm by
 // George Marsaglia.  See http://www.jstatsoft.org/v08/i14/paper
 
@@ -14395,7 +20167,7 @@ if (module && module.exports) {
 
 
 
-},{}],106:[function(require,module,exports){
+},{}],157:[function(require,module,exports){
 // A Javascript implementaion of Richard Brent's Xorgens xor4096 algorithm.
 //
 // This fast non-cryptographic random number generator is designed for
@@ -14543,7 +20315,7 @@ if (module && module.exports) {
   (typeof define) == 'function' && define   // present with an AMD loader
 );
 
-},{}],107:[function(require,module,exports){
+},{}],158:[function(require,module,exports){
 // A Javascript implementaion of the "xorshift7" algorithm by
 // François Panneton and Pierre L'ecuyer:
 // "On the Xorgshift Random Number Generators"
@@ -14642,7 +20414,7 @@ if (module && module.exports) {
 );
 
 
-},{}],108:[function(require,module,exports){
+},{}],159:[function(require,module,exports){
 // A Javascript implementaion of the "xorwow" prng algorithm by
 // George Marsaglia.  See http://www.jstatsoft.org/v08/i14/paper
 
@@ -14730,7 +20502,7 @@ if (module && module.exports) {
 
 
 
-},{}],109:[function(require,module,exports){
+},{}],160:[function(require,module,exports){
 /*
 Copyright 2014 David Bau.
 
@@ -14979,4 +20751,252 @@ if ((typeof module) == 'object' && module.exports) {
   Math    // math: package containing random, pow, and seedrandom
 );
 
-},{"crypto":2}]},{},[1]);
+},{"crypto":2}],161:[function(require,module,exports){
+(function (global){
+/*! https://mths.be/utf8js v2.1.2 by @mathias */
+;(function(root) {
+
+	// Detect free variables `exports`
+	var freeExports = typeof exports == 'object' && exports;
+
+	// Detect free variable `module`
+	var freeModule = typeof module == 'object' && module &&
+		module.exports == freeExports && module;
+
+	// Detect free variable `global`, from Node.js or Browserified code,
+	// and use it as `root`
+	var freeGlobal = typeof global == 'object' && global;
+	if (freeGlobal.global === freeGlobal || freeGlobal.window === freeGlobal) {
+		root = freeGlobal;
+	}
+
+	/*--------------------------------------------------------------------------*/
+
+	var stringFromCharCode = String.fromCharCode;
+
+	// Taken from https://mths.be/punycode
+	function ucs2decode(string) {
+		var output = [];
+		var counter = 0;
+		var length = string.length;
+		var value;
+		var extra;
+		while (counter < length) {
+			value = string.charCodeAt(counter++);
+			if (value >= 0xD800 && value <= 0xDBFF && counter < length) {
+				// high surrogate, and there is a next character
+				extra = string.charCodeAt(counter++);
+				if ((extra & 0xFC00) == 0xDC00) { // low surrogate
+					output.push(((value & 0x3FF) << 10) + (extra & 0x3FF) + 0x10000);
+				} else {
+					// unmatched surrogate; only append this code unit, in case the next
+					// code unit is the high surrogate of a surrogate pair
+					output.push(value);
+					counter--;
+				}
+			} else {
+				output.push(value);
+			}
+		}
+		return output;
+	}
+
+	// Taken from https://mths.be/punycode
+	function ucs2encode(array) {
+		var length = array.length;
+		var index = -1;
+		var value;
+		var output = '';
+		while (++index < length) {
+			value = array[index];
+			if (value > 0xFFFF) {
+				value -= 0x10000;
+				output += stringFromCharCode(value >>> 10 & 0x3FF | 0xD800);
+				value = 0xDC00 | value & 0x3FF;
+			}
+			output += stringFromCharCode(value);
+		}
+		return output;
+	}
+
+	function checkScalarValue(codePoint) {
+		if (codePoint >= 0xD800 && codePoint <= 0xDFFF) {
+			throw Error(
+				'Lone surrogate U+' + codePoint.toString(16).toUpperCase() +
+				' is not a scalar value'
+			);
+		}
+	}
+	/*--------------------------------------------------------------------------*/
+
+	function createByte(codePoint, shift) {
+		return stringFromCharCode(((codePoint >> shift) & 0x3F) | 0x80);
+	}
+
+	function encodeCodePoint(codePoint) {
+		if ((codePoint & 0xFFFFFF80) == 0) { // 1-byte sequence
+			return stringFromCharCode(codePoint);
+		}
+		var symbol = '';
+		if ((codePoint & 0xFFFFF800) == 0) { // 2-byte sequence
+			symbol = stringFromCharCode(((codePoint >> 6) & 0x1F) | 0xC0);
+		}
+		else if ((codePoint & 0xFFFF0000) == 0) { // 3-byte sequence
+			checkScalarValue(codePoint);
+			symbol = stringFromCharCode(((codePoint >> 12) & 0x0F) | 0xE0);
+			symbol += createByte(codePoint, 6);
+		}
+		else if ((codePoint & 0xFFE00000) == 0) { // 4-byte sequence
+			symbol = stringFromCharCode(((codePoint >> 18) & 0x07) | 0xF0);
+			symbol += createByte(codePoint, 12);
+			symbol += createByte(codePoint, 6);
+		}
+		symbol += stringFromCharCode((codePoint & 0x3F) | 0x80);
+		return symbol;
+	}
+
+	function utf8encode(string) {
+		var codePoints = ucs2decode(string);
+		var length = codePoints.length;
+		var index = -1;
+		var codePoint;
+		var byteString = '';
+		while (++index < length) {
+			codePoint = codePoints[index];
+			byteString += encodeCodePoint(codePoint);
+		}
+		return byteString;
+	}
+
+	/*--------------------------------------------------------------------------*/
+
+	function readContinuationByte() {
+		if (byteIndex >= byteCount) {
+			throw Error('Invalid byte index');
+		}
+
+		var continuationByte = byteArray[byteIndex] & 0xFF;
+		byteIndex++;
+
+		if ((continuationByte & 0xC0) == 0x80) {
+			return continuationByte & 0x3F;
+		}
+
+		// If we end up here, it’s not a continuation byte
+		throw Error('Invalid continuation byte');
+	}
+
+	function decodeSymbol() {
+		var byte1;
+		var byte2;
+		var byte3;
+		var byte4;
+		var codePoint;
+
+		if (byteIndex > byteCount) {
+			throw Error('Invalid byte index');
+		}
+
+		if (byteIndex == byteCount) {
+			return false;
+		}
+
+		// Read first byte
+		byte1 = byteArray[byteIndex] & 0xFF;
+		byteIndex++;
+
+		// 1-byte sequence (no continuation bytes)
+		if ((byte1 & 0x80) == 0) {
+			return byte1;
+		}
+
+		// 2-byte sequence
+		if ((byte1 & 0xE0) == 0xC0) {
+			byte2 = readContinuationByte();
+			codePoint = ((byte1 & 0x1F) << 6) | byte2;
+			if (codePoint >= 0x80) {
+				return codePoint;
+			} else {
+				throw Error('Invalid continuation byte');
+			}
+		}
+
+		// 3-byte sequence (may include unpaired surrogates)
+		if ((byte1 & 0xF0) == 0xE0) {
+			byte2 = readContinuationByte();
+			byte3 = readContinuationByte();
+			codePoint = ((byte1 & 0x0F) << 12) | (byte2 << 6) | byte3;
+			if (codePoint >= 0x0800) {
+				checkScalarValue(codePoint);
+				return codePoint;
+			} else {
+				throw Error('Invalid continuation byte');
+			}
+		}
+
+		// 4-byte sequence
+		if ((byte1 & 0xF8) == 0xF0) {
+			byte2 = readContinuationByte();
+			byte3 = readContinuationByte();
+			byte4 = readContinuationByte();
+			codePoint = ((byte1 & 0x07) << 0x12) | (byte2 << 0x0C) |
+				(byte3 << 0x06) | byte4;
+			if (codePoint >= 0x010000 && codePoint <= 0x10FFFF) {
+				return codePoint;
+			}
+		}
+
+		throw Error('Invalid UTF-8 detected');
+	}
+
+	var byteArray;
+	var byteCount;
+	var byteIndex;
+	function utf8decode(byteString) {
+		byteArray = ucs2decode(byteString);
+		byteCount = byteArray.length;
+		byteIndex = 0;
+		var codePoints = [];
+		var tmp;
+		while ((tmp = decodeSymbol()) !== false) {
+			codePoints.push(tmp);
+		}
+		return ucs2encode(codePoints);
+	}
+
+	/*--------------------------------------------------------------------------*/
+
+	var utf8 = {
+		'version': '2.1.2',
+		'encode': utf8encode,
+		'decode': utf8decode
+	};
+
+	// Some AMD build optimizers, like r.js, check for specific condition patterns
+	// like the following:
+	if (
+		typeof define == 'function' &&
+		typeof define.amd == 'object' &&
+		define.amd
+	) {
+		define(function() {
+			return utf8;
+		});
+	}	else if (freeExports && !freeExports.nodeType) {
+		if (freeModule) { // in Node.js or RingoJS v0.8.0+
+			freeModule.exports = utf8;
+		} else { // in Narwhal or RingoJS v0.7.0-
+			var object = {};
+			var hasOwnProperty = object.hasOwnProperty;
+			for (var key in utf8) {
+				hasOwnProperty.call(utf8, key) && (freeExports[key] = utf8[key]);
+			}
+		}
+	} else { // in Rhino or a web browser
+		root.utf8 = utf8;
+	}
+
+}(this));
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{}]},{},[1]);

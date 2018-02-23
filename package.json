@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "license": "",
   "dependencies": {
-    "deeplearn": "^0.3.12",
-    "deeplearn-knn-image-classifier": "^0.2.0",
+    "deeplearn": "~0.5.0",
+    "deeplearn-knn-image-classifier": "^0.3.0",
     "pre-commit": "^1.2.2"
   },
   "scripts": {
