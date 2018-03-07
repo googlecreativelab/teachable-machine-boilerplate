@@ -10,7 +10,7 @@ The benefit of using the SqueezeNet model instead of feeding the pixel values di
 
 Deeplearn.js has a built in model for doing this. Its called [KNN Image Classifier Model](https://github.com/PAIR-code/deeplearnjs/tree/master/models/knn_image_classifier), and this boilerplate code shows how to easily use it.
 
-If you are insterested in using this with [p5.js](https://p5js.org/), ITP has created a similar example that you can find [here](https://itpnyu.github.io/ml5/demos/teachableMachine/).
+If you are insterested in using this with [p5.js](https://p5js.org/), ITP has created a similar example that you can find [here](https://ml5js.github.io/docs/knn-image-example.html).
 
 ## Use code
 To use the code, first install the javascript dependencies by running  
