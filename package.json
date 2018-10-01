@@ -3,18 +3,12 @@
   "version": "0.1.0",
   "license": "",
   "dependencies": {
-    "deeplearn": "^0.3.12",
-    "deeplearn-knn-image-classifier": "^0.2.0",
     "@tensorflow-models/knn-classifier": "^0.2.2",
     "@tensorflow-models/mobilenet": "^0.2.2",
     "@tensorflow/tfjs": "^0.13.0",
-    "autoless": "^0.1.7",
-    "babel-preset-env": "^1.6.1",
-    "babelify": "^8.0.0",
-    "browserify": "^14.5.0",
-    "concurrently": "^3.5.0",
     "pre-commit": "^1.2.2",
-    "watchify": "^3.9.0"
+    "babel-preset-env": "^1.6.1",
+    "browserify": "^14.5.0"
   },
   "scripts": {
     "start": "budo main.js:dist/build.js --live --host localhost",
