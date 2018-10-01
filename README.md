@@ -8,19 +8,19 @@ The benefit of using the MobileNet model instead of feeding the pixel values dir
 Tensorflow has a built in model for doing this. Its called the [KNN Classifier](https://github.com/tensorflow/tfjs-models/tree/master/knn-classifier), and this boilerplate code shows how to easily use it.
 
 ## Use code
-To use the code, first install the javascript dependencies by running  
+To use the code, first install the Javascript dependencies by running  
 
 ```
 npm install
 ```
 
-Then start the local budo webserver by running 
+Then start the local budo web server by running 
 
 ```
 npm start
 ```
 
-This will start a webserver on [`localhost:9966`](http://localhost:9966). Try and allow permission to your webcam, and add some examples by holding down the buttons. 
+This will start a web server on [`localhost:9966`](http://localhost:9966). Try and allow permission to your webcam, and add some examples by holding down the buttons. 
 
 ## Quick Reference - KNN Classifier
 A quick overview of the most important function calls in the tensorflow.js [KNN Classifier](https://github.com/tensorflow/tfjs-models/tree/master/knn-classifier).
@@ -31,7 +31,7 @@ A quick overview of the most important function calls in the tensorflow.js [KNN 
 
 - `.clearClass(classIndex)`: Clears a specific class for training data.
 
-- `.predictClass(image)`: Runs the prediction on the image, and returns an object with a top classIndex, and confidences mapping all class indices to their confidence. 
+- `.predictClass(image)`: Runs the prediction on the image, and returns an object with a top class index and confidence score. 
 
 See the full implementation [here](https://github.com/tensorflow/tfjs-models/blob/master/knn-classifier/src/index.ts)
 
