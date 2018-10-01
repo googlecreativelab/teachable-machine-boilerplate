@@ -178,7 +178,6 @@ var Main = function () {
 
 
               if (this.training != -1) {
-                console.log('training: ' + this.training);
                 logits = infer();
 
                 // Add current image to classifier

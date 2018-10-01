@@ -7,7 +7,6 @@
     "@tensorflow-models/mobilenet": "^0.2.2",
     "@tensorflow/tfjs": "^0.13.0",
     "pre-commit": "^1.2.2",
-    "babel-preset-env": "^1.6.1",
     "browserify": "^14.5.0"
   },
   "scripts": {
