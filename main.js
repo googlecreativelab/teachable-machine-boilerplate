@@ -109,7 +109,6 @@ class Main {
 
       // Train class if one of the buttons is held down
       if (this.training != -1) {
-        console.log('training: ' + this.training);
         logits = infer();
 
         // Add current image to classifier
