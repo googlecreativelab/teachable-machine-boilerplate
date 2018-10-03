@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "license": "",
   "dependencies": {
-    "deeplearn": "~0.5.0",
-    "deeplearn-knn-image-classifier": "^0.3.0",
-    "pre-commit": "^1.2.2"
+    "@babel/polyfill": "^7.0.0",
+    "@tensorflow-models/knn-classifier": "^0.2.2",
+    "@tensorflow-models/mobilenet": "^0.2.2",
+    "@tensorflow/tfjs": "^0.13.0"
   },
   "scripts": {
     "start": "budo main.js:dist/build.js --live --host localhost",
@@ -36,7 +37,9 @@
     "babel-plugin-syntax-async-functions": "^6.13.0",
     "babel-plugin-transform-regenerator": "^6.26.0",
     "babel-preset-es2015": "^6.24.1",
+    "babel-preset-stage-0": "^6.0.15",
     "babelify": "^8.0.0",
-    "budo": "^10.0.4"
+    "budo": "^10.0.4",
+    "pre-commit": "^1.2.2"
   }
 }
