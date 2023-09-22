@@ -39,7 +39,7 @@
     "babel-preset-es2015": "^6.24.1",
     "babel-preset-stage-0": "^6.0.15",
     "babelify": "^8.0.0",
-    "budo": "^10.0.4",
+    "budo": "^11.8.4",
     "pre-commit": "^1.2.2"
   }
 }
